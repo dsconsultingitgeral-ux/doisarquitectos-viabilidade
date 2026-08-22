@@ -6,11 +6,51 @@ from src.state import init_state, go
 from src.prompt_loader import build_prompt
 from src.gemini_engine import run_full_analysis
 from src.report import build_pdf
-from src.ui import inject_css, header, steps, metric_card, extract_highlight, extract_label, source_cards, brand_logo
+from src.ui import inject_css, header, steps, metric_card, extract_highlight, source_cards, brand_logo
 from src.location import geocode_location, reverse_geocode, inferred_fields
 import folium
 from folium.plugins import Fullscreen, Draw
 from streamlit_folium import st_folium
+
+
+def extract_label(text: str, labels: list[str], fallback: str = "—") -> str:
+    """Extract an executive one-line value from a Markdown report."""
+    import re
+    lines = text.splitlines()
+    targets = [x.upper().strip(": ") for x in labels]
+
+    def clean(value: str) -> str:
+        s = value or ""
+        s = re.sub(r'[*#`>-]', '', s)
+        s = re.sub(r'\$+', '', s)
+        s = re.sub(r'\\text\{([^}]*)\}', r'\1', s)
+        s = re.sub(r'\\mathrm\{([^}]*)\}', r'\1', s)
+        s = re.sub(r'\\(?:,|;|!|quad|qquad)', ' ', s)
+        s = s.replace(r'\%', '%')
+        s = re.sub(r'\^\{([^}]*)\}', r'\1', s)
+        s = re.sub(r'_\{([^}]*)\}', r'\1', s)
+        s = re.sub(r'\s+', ' ', s).strip()
+        return s
+
+    for i, raw in enumerate(lines):
+        line = clean(raw)
+        upper = line.upper()
+        for label in targets:
+            if upper.startswith(label + ":"):
+                value = clean(line.split(":", 1)[1])
+                if value:
+                    return value
+                for nxt in lines[i+1:i+5]:
+                    value = clean(nxt)
+                    if value:
+                        return value
+            if upper == label:
+                for nxt in lines[i+1:i+5]:
+                    value = clean(nxt)
+                    if value:
+                        return value
+    return fallback
+
 
 st.set_page_config(
     page_title="doisarquitetos · Pré-Viabilidade",
@@ -522,17 +562,10 @@ elif step == 4:
             sources=st.session_state.analysis_sources,
         )
         st.download_button(
-            "📄 Descarregar relatório PDF",
+            "Descarregar relatório PDF",
             data=pdf,
             file_name="relatorio_viabilidade_urbanistica.pdf",
             mime="application/pdf",
-            use_container_width=True,
-        )
-        st.download_button(
-            "📝 Descarregar relatório Markdown",
-            data=text.encode("utf-8"),
-            file_name="relatorio_viabilidade_urbanistica.md",
-            mime="text/markdown",
             use_container_width=True,
         )
 
