@@ -1,3 +1,5 @@
+# V2.4 — Estudo Inteligente de Viabilidade
+
 # doisarquitectos — Estudo Inteligente de Viabilidade V2
 
 Aplicação Streamlit para estudo preliminar de viabilidade urbanística em Portugal.

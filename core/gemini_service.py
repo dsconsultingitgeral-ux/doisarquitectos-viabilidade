@@ -91,10 +91,12 @@ class GeminiService:
         return data
 
     def web_research(self, study_context: Dict[str, Any], document_context: Dict[str, Any]) -> Dict[str, Any]:
-        prompt = SYSTEM_PROMPT + "\n\n" + WEB_RESEARCH_PROMPT.format(
-            study_context=json.dumps(study_context, ensure_ascii=False, indent=2),
-            document_context=json.dumps(document_context, ensure_ascii=False, indent=2)[:45000],
-        )
+        # Não usar str.format() aqui: os prompts contêm blocos JSON com chavetas.
+        # Substituição explícita evita KeyError em chaves como "identification".
+        web_prompt = WEB_RESEARCH_PROMPT
+        web_prompt = web_prompt.replace("{study_context}", json.dumps(study_context, ensure_ascii=False, indent=2))
+        web_prompt = web_prompt.replace("{document_context}", json.dumps(document_context, ensure_ascii=False, indent=2)[:45000])
+        prompt = SYSTEM_PROMPT + "\n\n" + web_prompt
         grounding_tool = types.Tool(google_search=types.GoogleSearch())
         response = self._generate(
             contents=prompt,
@@ -121,11 +123,11 @@ class GeminiService:
         }
 
     def synthesize_rules(self, study_context: Dict[str, Any], document_context: Dict[str, Any], web_context: Dict[str, Any]) -> Dict[str, Any]:
-        prompt = SYSTEM_PROMPT + "\n\n" + SYNTHESIS_PROMPT.format(
-            study_context=json.dumps(study_context, ensure_ascii=False, indent=2),
-            document_context=json.dumps(document_context, ensure_ascii=False, indent=2)[:50000],
-            web_context=json.dumps(web_context, ensure_ascii=False, indent=2)[:50000],
-        )
+        synthesis_prompt = SYNTHESIS_PROMPT
+        synthesis_prompt = synthesis_prompt.replace("{study_context}", json.dumps(study_context, ensure_ascii=False, indent=2))
+        synthesis_prompt = synthesis_prompt.replace("{document_context}", json.dumps(document_context, ensure_ascii=False, indent=2)[:50000])
+        synthesis_prompt = synthesis_prompt.replace("{web_context}", json.dumps(web_context, ensure_ascii=False, indent=2)[:50000])
+        prompt = SYSTEM_PROMPT + "\n\n" + synthesis_prompt
         response = self._generate(
             contents=prompt,
             config=types.GenerateContentConfig(temperature=0.05, response_mime_type="application/json"),
@@ -137,12 +139,12 @@ class GeminiService:
         return data
 
     def generate_scenarios(self, objective: str, priority: str, rules: Dict[str, Any], calculations: Dict[str, Any]) -> List[Dict[str, Any]]:
-        prompt = SYSTEM_PROMPT + "\n\n" + SCENARIO_PROMPT.format(
-            objective=objective,
-            priority=priority,
-            rules=json.dumps(rules, ensure_ascii=False, indent=2),
-            calculations=json.dumps(calculations, ensure_ascii=False, indent=2),
-        )
+        scenario_prompt = SCENARIO_PROMPT
+        scenario_prompt = scenario_prompt.replace("{objective}", str(objective))
+        scenario_prompt = scenario_prompt.replace("{priority}", str(priority))
+        scenario_prompt = scenario_prompt.replace("{rules}", json.dumps(rules, ensure_ascii=False, indent=2))
+        scenario_prompt = scenario_prompt.replace("{calculations}", json.dumps(calculations, ensure_ascii=False, indent=2))
+        prompt = SYSTEM_PROMPT + "\n\n" + scenario_prompt
         response = self._generate(
             contents=prompt,
             config=types.GenerateContentConfig(temperature=0.2, response_mime_type="application/json"),

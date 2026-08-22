@@ -1,0 +1,23 @@
+V2.4 — fluxo opcional, área confirmada e robustez 3→4
+
+Principais alterações:
+1. A Etapa 2 (Documentação) passa a ser verdadeiramente opcional.
+   - Com documentos: analisar e enriquecer o estudo.
+   - Sem documentos: botão "Continuar sem documentação" e avanço para a Etapa 3.
+2. O JSON técnico deixou de ser apresentado ao utilizador na Etapa 2.
+   - A interface mostra um resumo humano por documento, confiança, importância, avisos e dados extraídos.
+3. Áreas identificadas nos documentos são apresentadas como candidatos, sem escolha silenciosa pela IA.
+4. Na Etapa 3 existe um campo de área editável antes da pesquisa.
+   - Pode escolher uma área detetada, a área do polígono ou introduzir manualmente.
+   - Pode confirmar explicitamente a área para os cálculos.
+5. Os cálculos da Etapa 5 usam SEMPRE a área confirmada pelo utilizador, quando existe.
+6. Corrigido o bug estrutural da Etapa 3 → Etapa 4:
+   - os prompts JSON já não usam str.format(), evitando KeyError em chavetas JSON;
+   - a Etapa 3 só aparece concluída quando existe uma matriz urbanística válida;
+   - matriz provisória só é guardada se passar validação mínima.
+7. Etapa 4 deixou de mostrar JSON bruto em conflitos.
+8. Etapa 6 só gera cenários depois de existirem cálculos baseados em área confirmada.
+
+Teste recomendado:
+A) Sem documentos: localização/polígono → Continuar sem documentação → Pesquisa territorial.
+B) Com documentos: Alameda Silva Rocha + 00077_PL_LOC.pdf + 00055_LEV_TOP.pdf → confirmar área → Pesquisa → Regras → Cálculos.

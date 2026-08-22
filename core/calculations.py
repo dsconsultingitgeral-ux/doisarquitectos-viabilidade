@@ -13,7 +13,7 @@ def _num(v):
 
 def calculate_capacity(rules: Dict[str, Any], fallback_area_m2: Optional[float] = None) -> Dict[str, Any]:
     inputs = rules.get("calculation_inputs", {}) or {}
-    area = _num(inputs.get("parcel_area_m2")) or fallback_area_m2
+    area = fallback_area_m2 or _num(inputs.get("parcel_area_m2"))
     iu = _num(inputs.get("utilization_index"))
     io = _num(inputs.get("occupation_index"))
     ii = _num(inputs.get("impermeability_index"))
