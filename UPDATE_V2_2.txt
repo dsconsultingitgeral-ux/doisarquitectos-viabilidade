@@ -1,0 +1,9 @@
+V2.2 - Branding, fluxo e relatório
+
+- Corrigido cabeçalho para evitar corte do título em diferentes larguras de ecrã.
+- Logótipo principal passa a ter largura fixa e proporção preservada.
+- Adicionado icon_logo.png para uso de ícone/favico.
+- Navegação alinhada em 7 etapas: Localização, Documentação, Pesquisa IA, Regras, Cálculos, Cenários, Relatório.
+- Separada a etapa 5 de Cálculos da etapa 6 de Cenários.
+- Relatório PDF redesenhado segundo a folha-tipo dos doisarquitectos: logótipo no topo direito e rodapé institucional em todas as páginas.
+- Capa limpa e profissional, tabelas técnicas, fontes, condicionantes, cálculos e cenários.

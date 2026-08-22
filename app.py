@@ -15,21 +15,23 @@ from core.utils import polygon_area_m2, stable_id
 from core.calculations import calculate_capacity
 from core.reporting import build_pdf
 
-st.set_page_config(page_title="doisarquitectos | Viabilidade", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="doisarquitectos | Viabilidade", page_icon=str(Path(__file__).parent / "assets" / "icon_logo.png"), layout="wide")
 
 CSS = """
 <style>
 :root { --ink:#1f2d33; --muted:#62727a; --accent:#91b7bf; --panel:#f5f8f9; }
 .block-container { padding-top: 1.5rem; max-width: 1500px; }
-.da-title {font-size:2rem;font-weight:750;letter-spacing:-.02em;color:var(--ink);line-height:1.25;padding-top:.18rem;overflow:visible;margin:0;}
-.da-sub {color:var(--muted);margin-top:2px;margin-bottom:18px;line-height:1.35;}
+.da-sub {color:var(--muted);margin-top:-8px;margin-bottom:18px;line-height:1.45;}
+[data-testid="stHeadingWithActionElements"] h1, [data-testid="stHeadingWithActionElements"] h2, [data-testid="stHeadingWithActionElements"] h3 {line-height:1.35 !important; padding-top:0.08rem !important; overflow:visible !important;}
+[data-testid="stImage"] img {object-fit:contain;}
+.brand-note{font-size:.82rem;color:var(--muted);margin-top:-8px;}
 .step {padding:11px 14px;border-radius:10px;background:var(--panel);border:1px solid #dbe6e9;margin-bottom:7px;}
 .kpi {border:1px solid #dde6e8;border-radius:12px;padding:14px;background:white;min-height:94px;}
 .kpi .v {font-size:1.55rem;font-weight:750;color:var(--ink)}
 .kpi .l {font-size:.83rem;color:var(--muted)}
 .small-note {font-size:.82rem;color:#68777d;}
 .source-box {background:#f7fafb;border-left:4px solid #91b7bf;padding:10px 12px;margin:5px 0;border-radius:4px;}
-.brand-wrap{display:flex;align-items:center;gap:18px;margin-bottom:8px}.brand-logo img{max-height:76px;object-fit:contain}.status-pill{display:inline-block;padding:4px 9px;border-radius:999px;background:#eef5f6;color:#35515b;font-size:.78rem;border:1px solid #d7e5e8}.muted-card{background:#f7fafb;border:1px solid #e2eaec;border-radius:12px;padding:12px 14px}
+.brand-wrap{display:flex;align-items:center;gap:18px;margin-bottom:8px}.brand-logo img{max-height:70px;object-fit:contain}.status-pill{display:inline-block;padding:4px 9px;border-radius:999px;background:#eef5f6;color:#35515b;font-size:.78rem;border:1px solid #d7e5e8}.muted-card{background:#f7fafb;border:1px solid #e2eaec;border-radius:12px;padding:12px 14px}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -38,12 +40,14 @@ ASSETS_DIR = Path(__file__).parent / "assets"
 LOGO_PATH = ASSETS_DIR / "logo.png"
 
 def show_brand(compact: bool = False):
-    c1, c2 = st.columns([0.34 if compact else 0.28, 1.72], vertical_alignment="center")
+    # Logótipo com largura fixa para nunca ser cortado por colunas responsivas.
+    c1, c2 = st.columns([0.18, 0.82], vertical_alignment="center")
     with c1:
         if LOGO_PATH.exists():
-            st.image(str(LOGO_PATH), use_container_width=True)
+            st.image(str(LOGO_PATH), width=170 if not compact else 145)
     with c2:
-        st.markdown("<div class='da-title'>Estudo Inteligente de Viabilidade</div><div class='da-sub'>Da localização às regras urbanísticas, condicionantes e cenários preliminares.</div>", unsafe_allow_html=True)
+        st.title("Estudo Inteligente de Viabilidade")
+        st.markdown("<div class='da-sub'>Da localização às regras urbanísticas, condicionantes e cenários preliminares.</div>", unsafe_allow_html=True)
 
 
 def login():
@@ -52,8 +56,8 @@ def login():
     c1,c2,c3 = st.columns([1,1.2,1])
     with c2:
         if LOGO_PATH.exists():
-            st.image(str(LOGO_PATH), use_container_width=True)
-        st.markdown("<div class='da-title' style='text-align:center'>Estudo Inteligente de Viabilidade</div><div class='da-sub' style='text-align:center'>Análise preliminar territorial e urbanística assistida por IA</div>", unsafe_allow_html=True)
+            st.image(str(LOGO_PATH), width=290)
+        st.markdown("<h2 style='text-align:center;line-height:1.35;margin:8px 0 4px 0'>Estudo Inteligente de Viabilidade</h2><div class='da-sub' style='text-align:center'>Análise preliminar territorial e urbanística assistida por IA</div>", unsafe_allow_html=True)
         with st.form("login"):
             user = st.text_input("Utilizador", value="admin1")
             pwd = st.text_input("Password", type="password")
@@ -95,7 +99,7 @@ with st.sidebar:
     for n, name, done in labels:
         st.markdown(f"<div class='step'>{'✅' if done else '○'} <b>{n}. {name}</b></div>", unsafe_allow_html=True)
     st.divider()
-    page = st.radio("Navegação", ["1 · Localização", "2 · Documentação", "3 · Pesquisa IA", "4 · Regras e condicionantes", "5 · Cenários", "6 · Relatório"], label_visibility="collapsed")
+    page = st.radio("Navegação", ["1 · Localização", "2 · Documentação", "3 · Pesquisa IA", "4 · Regras e condicionantes", "5 · Cálculos", "6 · Cenários", "7 · Relatório"], label_visibility="collapsed")
     st.caption(f"IA principal: {GEMINI_MODEL}")
     if st.button("↺ Novo estudo / limpar dados", use_container_width=True):
         for key in ["study", "quick_docs", "all_docs"]:
@@ -286,7 +290,37 @@ elif page.startswith("4"):
             st.json(study["calculations"])
 
 elif page.startswith("5"):
-    st.subheader("5. Objetivo do cliente e cenários")
+    st.subheader("5. Cálculos de capacidade urbanística")
+    rules = study.get("rules") or {}
+    if not rules:
+        st.info("Valide primeiro as regras e condicionantes na etapa 4.")
+    else:
+        area_doc = ((rules.get("identification") or {}).get("area_m2"))
+        area_map = study.get("estimated_area_m2")
+        st.write("Os cálculos são executados em Python a partir de parâmetros confirmados. A IA não inventa valores numéricos em falta.")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.metric("Área do levantamento/documento", f"{area_doc:,.1f} m²" if isinstance(area_doc,(int,float)) else "A confirmar")
+        with c2:
+            st.metric("Área cartográfica aproximada", f"{area_map:,.1f} m²" if isinstance(area_map,(int,float)) else "A confirmar")
+        area_default = float(area_doc) if isinstance(area_doc,(int,float)) else (float(area_map) if isinstance(area_map,(int,float)) else 0.0)
+        confirmed_area = st.number_input("Área do terreno a utilizar nos cálculos (m²)", min_value=0.0, value=area_default, step=1.0, help="Confirme este valor com levantamento topográfico, certidão/caderneta ou outra fonte fiável.")
+        if st.button("🧮 Executar cálculos determinísticos", type="primary", disabled=confirmed_area <= 0):
+            study["confirmed_area_m2"] = confirmed_area
+            study["calculations"] = calculate_capacity(rules, confirmed_area)
+            st.success("Cálculos executados em Python.")
+        if study.get("calculations"):
+            derived=(study["calculations"] or {}).get("derived",{})
+            if derived:
+                cols=st.columns(min(4,max(1,len(derived))))
+                for i,(k,v) in enumerate(derived.items()):
+                    with cols[i % len(cols)]:
+                        st.metric(k.replace("_"," ").title(), v)
+            with st.expander("Ver cálculo técnico completo"):
+                st.json(study["calculations"])
+
+elif page.startswith("6"):
+    st.subheader("6. Objetivo do cliente e cenários")
     study["objective"] = st.selectbox("Objetivo", [
         "Determinar o melhor aproveitamento admissível", "Maximizar potencial do terreno", "Habitação multifamiliar",
         "Habitação unifamiliar", "Habitação bifamiliar", "Moradias em banda", "Comércio", "Serviços", "Uso misto habitação + comércio/serviços", "Turismo", "Outro"
@@ -314,8 +348,8 @@ elif page.startswith("5"):
                 st.write(s.get("concept", ""))
                 if s.get("warnings"): st.warning(" · ".join(s["warnings"]))
 
-elif page.startswith("6"):
-    st.subheader("6. Relatório e exportação")
+elif page.startswith("7"):
+    st.subheader("7. Relatório e exportação")
     if not (study.get("rules") and study.get("scenarios")):
         st.info("Complete pelo menos as regras e os cenários.")
     else:
