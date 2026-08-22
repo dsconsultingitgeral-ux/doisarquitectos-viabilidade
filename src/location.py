@@ -321,13 +321,17 @@ def inferred_fields(result: GeoResult) -> dict:
         or ""
     )
 
-    # Prefer the administrative parish field. Only fall back to suburb/village
-    # when Nominatim does not expose a dedicated parish.
+    # Prefer the administrative parish field. In Portugal OSM/Nominatim does
+    # not always expose "parish" even when the place name clearly corresponds
+    # to the freguesia. We therefore use a controlled hierarchy and, when the
+    # parish is absent, reuse the best locality-level administrative name.
     parish = (
         a.get("parish")
         or a.get("city_district")
         or a.get("suburb")
         or a.get("village")
+        or a.get("hamlet")
+        or a.get("locality")
         or ""
     )
 
@@ -335,11 +339,19 @@ def inferred_fields(result: GeoResult) -> dict:
         a.get("neighbourhood")
         or a.get("suburb")
         or a.get("village")
+        or a.get("hamlet")
+        or a.get("locality")
         or a.get("town")
         or a.get("city")
         or parish
         or ""
     )
+
+    # If Nominatim supplied a locality but omitted the parish, that locality is
+    # generally the best available freguesia-level label for this workflow.
+    # Avoid copying the municipality name into the parish field.
+    if not parish and locality and locality.strip().lower() != municipality.strip().lower():
+        parish = locality
 
     road = (
         a.get("road")

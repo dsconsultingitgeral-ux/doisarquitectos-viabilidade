@@ -8,7 +8,7 @@ def load_master_prompt() -> str:
 def load_source_addendum() -> str:
     return (ROOT / "prompts" / "source_addendum.txt").read_text(encoding="utf-8")
 
-def build_prompt(location: str, municipality: str = "", parish: str = "", locality: str = "", article: str = "", known_area: str = "", geo_lat=None, geo_lon=None, geo_display_name: str = "", has_documents: bool = False) -> str:
+def build_prompt(location: str, municipality: str = "", parish: str = "", locality: str = "", article: str = "", known_area: str = "", geo_lat=None, geo_lon=None, geo_display_name: str = "", has_documents: bool = False, parcel_polygon_coords=None) -> str:
     master = load_master_prompt()
     addendum = load_source_addendum()
 
@@ -34,6 +34,12 @@ Artigo matricial indicado: {article or "NÃO INDICADO"}
 Geocodificação auxiliar: {geo_display_name or "NÃO DISPONÍVEL"}
 Coordenadas auxiliares: {f"{geo_lat:.6f}, {geo_lon:.6f}" if geo_lat is not None and geo_lon is not None else "NÃO DISPONÍVEIS"}
 Documentos específicos da parcela anexados: {"SIM" if has_documents else "NÃO"}
+Perímetro aproximado desenhado pelo utilizador: {parcel_polygon_coords if parcel_polygon_coords else "NÃO DESENHADO"}
+
+REGRA SOBRE O PERÍMETRO DESENHADO:
+Se existirem coordenadas do perímetro desenhado, utiliza-as apenas como referência espacial para compreender a posição e a forma aproximada do terreno.
+Não trates este desenho como limite cadastral, levantamento topográfico ou área jurídica confirmada.
+Quando útil, usa-o para orientar a pesquisa territorial e a leitura das condicionantes, mantendo sempre a indicação de que é um perímetro aproximado.
 
 REGRA ESPECIAL QUANDO NÃO EXISTIREM DOCUMENTOS:
 Se não existirem documentos anexados, NÃO interrompas o estudo. Produz na mesma um ESTUDO PRELIMINAR DE LOCALIZAÇÃO E VIABILIDADE com base na localização fornecida, geocodificação apenas como ponto de partida e pesquisa externa obrigatória em fontes oficiais.

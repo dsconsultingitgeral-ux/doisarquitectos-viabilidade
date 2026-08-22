@@ -190,8 +190,16 @@ if step == 1:
         st.success("Morada localizada ao nível da rua. Confirme visualmente o ponto no mapa.")
 
     st.caption(
-        "Clique num ponto para corrigir ou confirmar a morada. "
-        "Use a ferramenta de desenho no canto do mapa para marcar o perímetro aproximado do terreno."
+        "Escolha abaixo se pretende corrigir a localização ou desenhar o terreno. "
+        "Os dois modos são separados para evitar que os cliques do polígono alterem a morada."
+    )
+
+    map_mode = st.radio(
+        "Interação no mapa",
+        ["Selecionar localização", "Desenhar terreno"],
+        horizontal=True,
+        key="map_interaction_mode",
+        label_visibility="collapsed",
     )
 
     fmap = folium.Map(
@@ -202,26 +210,19 @@ if step == 1:
     )
     Fullscreen(position="topright", title="Ecrã inteiro", title_cancel="Sair").add_to(fmap)
 
-    # Drawing tools: polygon and rectangle are enough for an approximate parcel.
-    Draw(
-        export=False,
-        position="topleft",
-        draw_options={
-            "polyline": False,
-            "polygon": {
-                "allowIntersection": False,
-                "showArea": True,
-                "shapeOptions": {"color": "#1C2638", "weight": 3, "fillOpacity": 0.10},
+    # Re-show a previously saved parcel geometry after Streamlit reruns.
+    saved_geom = st.session_state.get("parcel_polygon_geojson")
+    if saved_geom:
+        folium.GeoJson(
+            saved_geom,
+            name="Terreno desenhado",
+            style_function=lambda _feature: {
+                "color": "#1C2638",
+                "weight": 3,
+                "fillColor": "#1C2638",
+                "fillOpacity": 0.10,
             },
-            "rectangle": {
-                "shapeOptions": {"color": "#1C2638", "weight": 3, "fillOpacity": 0.10},
-            },
-            "circle": False,
-            "marker": False,
-            "circlemarker": False,
-        },
-        edit_options={"edit": True, "remove": True},
-    ).add_to(fmap)
+        ).add_to(fmap)
 
     if st.session_state.geo_lat is not None and st.session_state.geo_lon is not None:
         folium.Marker(
@@ -230,64 +231,117 @@ if step == 1:
             icon=folium.Icon(color="darkblue", icon="map-marker")
         ).add_to(fmap)
 
+    # IMPORTANT:
+    # In drawing mode we do NOT ask streamlit-folium for last_clicked.
+    # Every vertex of a Leaflet polygon is technically a click; listening to
+    # last_clicked caused Streamlit to rerun after the first vertex and made
+    # polygon/rectangle drawing appear broken.
+    if map_mode == "Desenhar terreno":
+        Draw(
+            export=False,
+            position="topleft",
+            draw_options={
+                "polyline": False,
+                "polygon": {
+                    "allowIntersection": False,
+                    "showArea": True,
+                    "shapeOptions": {
+                        "color": "#1C2638",
+                        "weight": 3,
+                        "fillOpacity": 0.10
+                    },
+                },
+                "rectangle": {
+                    "shapeOptions": {
+                        "color": "#1C2638",
+                        "weight": 3,
+                        "fillOpacity": 0.10
+                    },
+                },
+                "circle": False,
+                "marker": False,
+                "circlemarker": False,
+            },
+            edit_options={"edit": True, "remove": True},
+        ).add_to(fmap)
+
+        st.info(
+            "Modo desenho ativo: use o polígono ou o retângulo no canto superior esquerdo do mapa. "
+            "Conclua o polígono clicando novamente no primeiro ponto."
+        )
+        returned_objects = ["all_drawings", "last_active_drawing"]
+        map_key = "terrain_map_draw_v50"
+    else:
+        st.caption("Clique no mapa para corrigir ou confirmar o ponto da morada.")
+        returned_objects = ["last_clicked"]
+        map_key = "terrain_map_location_v50"
+
     map_data = st_folium(
         fmap,
         width=None,
         height=470,
-        returned_objects=["last_clicked", "all_drawings"],
+        returned_objects=returned_objects,
         use_container_width=True,
-        key="terrain_map_v44",
+        key=map_key,
     )
 
-    # --- Clique no mapa -> reverse geocoding
-    clicked = (map_data or {}).get("last_clicked")
-    if clicked:
-        click_key = f'{clicked.get("lat", 0):.6f},{clicked.get("lng", 0):.6f}'
-        if click_key != st.session_state.get("last_map_click"):
-            st.session_state["last_map_click"] = click_key
-            try:
-                with st.spinner("A identificar o local selecionado…"):
-                    geo = reverse_geocode(float(clicked["lat"]), float(clicked["lng"]))
-                if geo:
-                    inf = inferred_fields(geo)
-                    st.session_state.geo_lat = geo.lat
-                    st.session_state.geo_lon = geo.lon
-                    st.session_state.geo_display_name = geo.display_name
-                    st.session_state.geo_source_url = geo.source_url
-                    st.session_state.location = inf["concise"]
-                    st.session_state.municipality = inf["municipality"]
-                    st.session_state.parish = inf["parish"]
-                    st.session_state.locality = inf["locality"]
-                    st.session_state["geo_precision"] = "exact_street"
+    # --- MODO LOCALIZAÇÃO: clique -> reverse geocoding
+    if map_mode == "Selecionar localização":
+        clicked = (map_data or {}).get("last_clicked")
+        if clicked:
+            click_key = f'{clicked.get("lat", 0):.6f},{clicked.get("lng", 0):.6f}'
+            if click_key != st.session_state.get("last_map_click"):
+                st.session_state["last_map_click"] = click_key
+                try:
+                    with st.spinner("A identificar o local selecionado…"):
+                        geo = reverse_geocode(float(clicked["lat"]), float(clicked["lng"]))
+                    if geo:
+                        inf = inferred_fields(geo)
+                        st.session_state.geo_lat = geo.lat
+                        st.session_state.geo_lon = geo.lon
+                        st.session_state.geo_display_name = geo.display_name
+                        st.session_state.geo_source_url = geo.source_url
+                        st.session_state.location = inf["concise"]
+                        st.session_state.municipality = inf["municipality"]
+                        st.session_state.parish = inf["parish"]
+                        st.session_state.locality = inf["locality"]
+                        st.session_state["geo_precision"] = "exact_street"
 
-                    # Safe widget updates on next run.
-                    st.session_state["_pending_location_search"] = inf["concise"]
-                    st.session_state["_pending_municipality"] = inf["municipality"]
-                    st.session_state["_pending_parish"] = inf["parish"]
-                    st.session_state["_pending_locality"] = inf["locality"]
-                    st.rerun()
-            except Exception as exc:
-                st.warning("O ponto foi selecionado, mas não foi possível obter automaticamente a morada.")
-                st.caption(str(exc))
+                        # Safe widget updates on next run.
+                        st.session_state["_pending_location_search"] = inf["concise"]
+                        st.session_state["_pending_municipality"] = inf["municipality"]
+                        st.session_state["_pending_parish"] = inf["parish"]
+                        st.session_state["_pending_locality"] = inf["locality"]
+                        st.rerun()
+                except Exception as exc:
+                    st.warning("O ponto foi selecionado, mas não foi possível obter automaticamente a morada.")
+                    st.caption(str(exc))
 
-    # --- Drawing / polygon capture
-    drawings = (map_data or {}).get("all_drawings") or []
-    polygon_coords = []
-    if drawings:
-        # Use the most recent polygon/rectangle.
-        geom = drawings[-1].get("geometry", {})
-        gtype = geom.get("type")
-        coords = geom.get("coordinates", [])
-        if gtype == "Polygon" and coords:
-            polygon_coords = coords[0]
-            st.session_state["parcel_polygon_geojson"] = geom
-            st.session_state["parcel_polygon_coords"] = polygon_coords
+    # --- MODO DESENHO: capture polygon/rectangle without reverse geocoding.
+    if map_mode == "Desenhar terreno":
+        drawings = (map_data or {}).get("all_drawings") or []
+        last_drawing = (map_data or {}).get("last_active_drawing")
 
-    if polygon_coords:
-        st.success(
-            f"Perímetro aproximado desenhado com {max(len(polygon_coords)-1, 0)} vértices. "
-            "Será tratado apenas como referência gráfica, não como limite cadastral confirmado."
-        )
+        drawing = last_drawing or (drawings[-1] if drawings else None)
+        if drawing:
+            geom = drawing.get("geometry", {}) if isinstance(drawing, dict) else {}
+            gtype = geom.get("type")
+            coords = geom.get("coordinates", [])
+
+            if gtype == "Polygon" and coords:
+                polygon_coords = coords[0]
+                st.session_state["parcel_polygon_geojson"] = geom
+                st.session_state["parcel_polygon_coords"] = polygon_coords
+                st.success(
+                    f"Terreno desenhado com {max(len(polygon_coords)-1, 0)} vértices. "
+                    "O perímetro fica guardado para contextualizar a análise."
+                )
+
+        if st.session_state.get("parcel_polygon_geojson"):
+            if st.button("Apagar perímetro desenhado", key="clear_parcel_polygon"):
+                st.session_state["parcel_polygon_geojson"] = None
+                st.session_state["parcel_polygon_coords"] = []
+                st.rerun()
 
     if st.session_state.geo_lat is not None and st.session_state.geo_lon is not None:
         st.markdown(
@@ -498,6 +552,7 @@ elif step == 3:
             geo_lon=st.session_state.geo_lon,
             geo_display_name=st.session_state.geo_display_name,
             has_documents=bool(st.session_state.uploaded_files),
+            parcel_polygon_coords=st.session_state.get("parcel_polygon_coords", []),
         )
 
         try:
