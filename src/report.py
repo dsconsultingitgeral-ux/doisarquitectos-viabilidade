@@ -99,7 +99,7 @@ def _content_pdf(title: str, location: str, analysis_text: str, sources) -> byte
     story = [
         Paragraph(_fmt(title), styles["DA_Title"]),
         Paragraph(
-            _fmt(f"{location} · Estudo preliminar · {datetime.now().strftime('%d/%m/%Y')}"),
+            _fmt(f"{location} · Relatório de Viabilidade Urbanística · {datetime.now().strftime('%d/%m/%Y')}"),
             styles["DA_Meta"]
         ),
         Spacer(1, 3*mm)

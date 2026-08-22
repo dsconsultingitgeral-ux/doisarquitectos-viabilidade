@@ -13,13 +13,9 @@ def login_required() -> bool:
         brand_logo(login=True)
         st.markdown("""
         <div style="text-align:center;margin:18px 0 24px">
-          <div style="font-size:11px;letter-spacing:.18em;color:#697386;font-weight:800">
-            PRÉ-VIABILIDADE URBANÍSTICA
-          </div>
           <div style="font-size:32px;line-height:1.08;font-weight:760;color:#171D2A;margin:10px 0 6px">
-            Acesso reservado
+            Viabilidade Urbanística
           </div>
-          <div style="font-size:13px;color:#8A93A3">doisarquitetos</div>
         </div>
         """, unsafe_allow_html=True)
 

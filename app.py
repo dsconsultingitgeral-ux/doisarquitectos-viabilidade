@@ -1,5 +1,9 @@
 from pathlib import Path
+from datetime import datetime
+import unicodedata
+import re
 import streamlit as st
+from PIL import Image
 
 from src.auth import login_required, logout_button
 from src.state import init_state, go
@@ -52,9 +56,16 @@ def extract_label(text: str, labels: list[str], fallback: str = "—") -> str:
     return fallback
 
 
+def safe_filename_part(value: str) -> str:
+    value = value or ""
+    value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+    value = re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_")
+    return value[:60] or "Terreno"
+
+
 st.set_page_config(
-    page_title="doisarquitetos · Pré-Viabilidade",
-    page_icon="◼",
+    page_title="Viabilidade Urbanística · doisarquitetos",
+    page_icon=Image.open(Path(__file__).resolve().parent / "assets" / "symbol.png"),
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -67,8 +78,7 @@ if not login_required():
 
 with st.sidebar:
     brand_logo(sidebar=True)
-    st.markdown("### doisarquitetos")
-    st.caption("Pré-Viabilidade Urbanística · V4.2 Plus")
+    st.markdown("### Viabilidade Urbanística")
     st.divider()
     if st.button("01 · Localização", use_container_width=True): go(1)
     if st.button("02 · Documentos", use_container_width=True): go(2)
@@ -95,7 +105,7 @@ if step == 1:
       <div class="small">
         Comece por uma rua, morada, localidade ou coordenadas. Também pode clicar no mapa
         para identificar automaticamente o local e desenhar um polígono aproximado da parcela.
-        Sem documentos, a aplicação continua e produz uma pré-análise com base nas fontes oficiais disponíveis.
+        Sem documentos, a aplicação continua e produz uma análise inicial com base nas fontes oficiais disponíveis.
       </div>
     </div>
     """, unsafe_allow_html=True)
@@ -114,7 +124,7 @@ if step == 1:
         query = st.text_input(
             "Pesquisar localização",
             key="location_search_v43",
-            placeholder="Ex.: Alameda Silva Rocha, Aveiro"
+            placeholder="Inserir rua, morada, localidade ou coordenadas"
         )
     with action_col:
         st.write("")
@@ -313,7 +323,7 @@ if step == 1:
     with d5:
         known_area_value = st.text_input(
             "Área conhecida, se disponível",
-            placeholder="Ex.: 2.974 m²",
+            placeholder="Inserir área (m²)",
             key="known_area_v43"
         )
         st.session_state.known_area = known_area_value
@@ -347,7 +357,7 @@ if step == 1:
 # 02 — DOCUMENTOS
 # ------------------------------------------------------------
 elif step == 2:
-    header("Documentos", "Anexe o que existir. Se não houver documentos, a V4.2 Plus avança na mesma com um estudo preliminar baseado na localização e em fontes oficiais.")
+    header("Documentos", "Anexe os documentos disponíveis. Se não existirem, a aplicação pode avançar com base na localização e em fontes oficiais.")
 
     uploaded = st.file_uploader(
         "Documentos do terreno",
@@ -371,11 +381,11 @@ elif step == 2:
         st.markdown("""
         <div class="da-status-warn">
           <b>Sem documentos? Pode avançar.</b><br>
-          A V4.2 Plus cria um estudo preliminar com base na localização confirmada e pesquisa oficial. Nesse modo, não inventa a área nem os limites do terreno e marca como <b>A CONFIRMAR</b> tudo o que depende do polígono exato da parcela.
+          A aplicação realiza uma análise com base na localização confirmada e em fontes oficiais. Quando faltarem dados da parcela, assinala claramente o que necessita de confirmação.
         </div>
         """, unsafe_allow_html=True)
 
-    st.markdown("### Checklist que o motor irá procurar")
+    st.markdown("### Elementos verificados na análise")
     check = [
         "PDM em vigor e regulamento", "Planta de Ordenamento", "Planta de Condicionantes",
         "REN", "RAN", "Recursos hídricos / cheias", "Incêndio e riscos",
@@ -393,9 +403,9 @@ elif step == 2:
     with q1:
         st.markdown("""
         <div class="da-card">
-          <div class="da-card-label">MODO RÁPIDO</div>
+          <div class="da-card-label">APENAS LOCALIZAÇÃO</div>
           <div class="da-card-value" style="font-size:20px">Só localização</div>
-          <div class="da-card-note">Pesquisa oficial e estudo preliminar, mesmo sem documentos da parcela.</div>
+          <div class="da-card-note">Pesquisa oficial e análise inicial, mesmo sem documentos da parcela.</div>
         </div>
         """, unsafe_allow_html=True)
         quick = st.button("Avançar sem documentos →", use_container_width=True)
@@ -403,7 +413,7 @@ elif step == 2:
     with q2:
         st.markdown("""
         <div class="da-card">
-          <div class="da-card-label">MODO COMPLETO</div>
+          <div class="da-card-label">COM DOCUMENTOS</div>
           <div class="da-card-value" style="font-size:20px">Com documentos</div>
           <div class="da-card-note">Maior confiança, cruzamento documental e análise parcela-a-parcela.</div>
         </div>
@@ -422,33 +432,33 @@ elif step == 2:
 # 03 — ANÁLISE IA
 # ------------------------------------------------------------
 elif step == 3:
-    header("Análise urbanística IA", "O Master Prompt aprovado é executado integralmente, com os documentos anexados e pesquisa web oficial.")
+    header(
+        "Análise urbanística IA",
+        "A aplicação cruza a localização e os documentos anexados com pesquisa em fontes oficiais."
+    )
 
     st.markdown("""
     <div class="da-card">
-    <b>Motor de análise V4.2 Plus</b><br><br>
-    ✓ Interpretação integral dos documentos<br>
-    ✓ Cruzamento e deteção de conflitos<br>
-    ✓ Confirmação da localização<br>
-    ✓ Pesquisa externa obrigatória em fontes oficiais<br>
-    ✓ PDM, REN, RAN, ruído, incêndio, património e servidões<br>
-    ✓ Extração de parâmetros quantitativos<br>
-    ✓ Cálculos e identificação do fator limitante<br>
-    ✓ Cenários Conservador / Equilibrado / Máximo<br>
-    ✓ Referências numeradas [1], [2], [3] em todo o relatório<br>
-    ✓ Lista final dos links efetivamente acedidos
+      <div class="da-card-label">ANÁLISE URBANÍSTICA</div>
+      <div class="da-card-value" style="font-size:20px">Verificação técnica e potencial do terreno</div>
+      <div class="da-card-note" style="font-size:13px;line-height:1.65;margin-top:14px">
+        ✓ Localização e documentação disponível<br>
+        ✓ PDM, ordenamento e condicionantes<br>
+        ✓ REN, RAN, ruído, incêndio, património e servidões<br>
+        ✓ Parâmetros urbanísticos e cálculos aplicáveis<br>
+        ✓ Cenários de aproveitamento do terreno<br>
+        ✓ Fontes oficiais e referências utilizadas
+      </div>
     </div>
     """, unsafe_allow_html=True)
 
-    with st.expander("Ver política do Master Prompt"):
-        st.write("O ficheiro prompts/master_prompt.txt contém integralmente o prompt aprovado. A V4.2 Plus não o resume nem o substitui. Existe apenas um addendum separado para obrigar à rastreabilidade das fontes e dos links.")
-
+    st.write("")
     c1, c2 = st.columns([1, 2])
     with c1:
         if st.button("← Documentos", use_container_width=True):
             go(2)
     with c2:
-        run = st.button("INICIAR ANÁLISE COMPLETA", type="primary", use_container_width=True)
+        run = st.button("INICIAR ANÁLISE", type="primary", use_container_width=True)
 
     if run:
         if not st.session_state.location:
@@ -469,8 +479,11 @@ elif step == 3:
         )
 
         try:
-            with st.spinner("A analisar documentos, consultar fontes oficiais e calcular o potencial do terreno…"):
-                analysis, sources, response_id = run_full_analysis(prompt, st.session_state.uploaded_files)
+            with st.spinner("A analisar o terreno e consultar fontes oficiais…"):
+                analysis, sources, response_id = run_full_analysis(
+                    prompt,
+                    st.session_state.uploaded_files
+                )
             st.session_state.analysis_text = analysis
             st.session_state.analysis_sources = sources
             st.session_state.response_id = response_id
@@ -478,13 +491,13 @@ elif step == 3:
         except Exception as exc:
             st.error("Não foi possível concluir a análise.")
             st.exception(exc)
-            st.info("Verifica a GEMINI_API_KEY e o modelo configurado nos Secrets privados do Streamlit.")
+            st.info("Verifica a configuração da API nos Secrets privados do Streamlit.")
 
 # ------------------------------------------------------------
 # 04 — POTENCIAL / RELATÓRIO
 # ------------------------------------------------------------
 elif step == 4:
-    header("Potencial do terreno", "Resultado executivo primeiro; fundamentação técnica, fontes e documentos permanecem disponíveis abaixo.")
+    header("Potencial do terreno", "Síntese objetiva dos principais parâmetros e do potencial identificado.")
 
     text = st.session_state.analysis_text
     if not text:
@@ -533,40 +546,53 @@ elif step == 4:
     with row2[2]: metric_card("Confiança", confidence, "evidência global")
 
     st.write("")
-    tabs = st.tabs(["Síntese", "Análise técnica", "Fontes", "Relatório PDF"])
+    tabs = st.tabs(["Análise técnica", "Fontes", "Relatório PDF"])
 
     with tabs[0]:
-        # Show the conclusion section when possible; otherwise show the first part.
-        marker = text.upper().find("CONCLUSÃO EXECUTIVA")
-        if marker >= 0:
-            st.markdown(text[marker:])
-        else:
-            st.markdown(text)
-
-    with tabs[1]:
         st.markdown(text)
 
-    with tabs[2]:
-        st.markdown("### Links efetivamente acedidos")
-        st.caption("Estes links são extraídos das anotações de citação URL devolvidas pela Pesquisa Google integrada no Gemini nesta execução.")
+    with tabs[1]:
+        st.markdown("### Fontes consultadas")
+        st.caption("Links e fontes utilizados durante a análise.")
         source_cards(st.session_state.analysis_sources)
-        st.divider()
-        st.markdown("### Metodologia [1], [2], [3]")
-        st.write("O próprio relatório usa referências numeradas junto às conclusões e termina com as secções de Referências, Fontes Online Acedidas e Documentos Fornecidos e Analisados, conforme o addendum obrigatório.")
 
-    with tabs[3]:
+    with tabs[2]:
         pdf = build_pdf(
-            title="Estudo Preliminar de Viabilidade Urbanística",
+            title="Relatório de Viabilidade Urbanística",
             location=st.session_state.location,
             analysis_text=text,
             sources=st.session_state.analysis_sources,
         )
+
+        local_name = (
+            st.session_state.parish
+            or st.session_state.locality
+            or st.session_state.municipality
+            or "Terreno"
+        )
+        pdf_name = (
+            f"{datetime.now().strftime('%d%m%Y')}_"
+            f"Relatorio_Viabilidade_Urbanistica_"
+            f"{safe_filename_part(local_name)}.pdf"
+        )
+
+        st.markdown("""
+        <div class="da-hero" style="margin-top:4px">
+          <div class="big">Relatório final</div>
+          <div class="small">
+            Documento PDF formatado sobre a folha-tipo oficial, com análise técnica,
+            conclusões e fontes consultadas.
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
         st.download_button(
-            "Descarregar relatório PDF",
+            "DESCARREGAR RELATÓRIO PDF",
             data=pdf,
-            file_name="relatorio_viabilidade_urbanistica.pdf",
+            file_name=pdf_name,
             mime="application/pdf",
             use_container_width=True,
+            type="primary",
         )
 
     st.divider()

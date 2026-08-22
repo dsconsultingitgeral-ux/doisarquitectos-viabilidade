@@ -172,7 +172,7 @@ def brand_logo(sidebar=False, login=False):
 
 def header(title: str, subtitle: str):
     st.markdown(
-        f'<div class="da-kicker">PRÉ-VIABILIDADE URBANÍSTICA · V4.2 PLUS</div>'
+        f'<div class="da-kicker">VIABILIDADE URBANÍSTICA</div>'
         f'<div class="da-title">{title}</div>'
         f'<div class="da-sub">{subtitle}</div>',
         unsafe_allow_html=True
