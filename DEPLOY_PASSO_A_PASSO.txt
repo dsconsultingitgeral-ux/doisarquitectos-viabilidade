@@ -1,29 +1,10 @@
-PASSO A PASSO RÁPIDO
-
-A) GOOGLE AI STUDIO
-1. Entre em https://aistudio.google.com/
-2. API Keys -> Create API key.
-3. Se quiser paid tier: Set up billing.
-4. O fluxo atual pode exigir mínimo US$10/equivalente em créditos pré-pagos.
-5. Copie a API key.
-
-B) GITHUB
-1. Novo repositório PRIVADO.
-2. Upload de TODOS os ficheiros desta pasta.
-3. Não enviar secrets.toml real.
-
-C) STREAMLIT CLOUD
-1. https://share.streamlit.io/
-2. Create app.
-3. Repo -> branch main -> app.py.
-4. Settings -> Secrets:
-   GEMINI_API_KEY = "..."
-   APP_USER = "admin1"
-   APP_PASSWORD = "doisarquitetos"
-   GEMINI_MODEL = "gemini-3.7-flash"
-5. Deploy.
-
-D) LOGIN DEMO
-User: admin1
-Password: doisarquitetos
-(Altere antes de produção.)
+1. Extraia o ZIP.
+2. No GitHub: Add file > Upload files.
+3. Carregue o CONTEÚDO da pasta V3 para a raiz do repositório.
+4. Commit: V3.0 - motor simplificado por checklist.
+5. No Streamlit, aguarde o redeploy.
+6. Confirme no menu lateral: V3.0.
+7. Secrets recomendados:
+   GEMINI_MODEL = "gemini-3.6-flash"
+   GEMINI_FALLBACK_MODELS = "gemini-3.7-flash"
+   GEMINI_TIMEOUT_MS = 45000
