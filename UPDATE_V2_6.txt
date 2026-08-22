@@ -1,0 +1,15 @@
+V2.6 — motor de pesquisa territorial reestruturado
+
+Principais alterações:
+- uma matriz urbanística direta, centrada na rua/freguesia/município/coordenadas/polígono;
+- documentos analisados entram diretamente no contexto da pesquisa;
+- pesquisa automática aprofundada de parâmetros quando a primeira passagem não encontra valores;
+- prioridade a fontes oficiais;
+- área nunca inferida por geocodificação;
+- localização administrativa preservada e atualizada com o resultado oficial;
+- grau de confiança derivado de dados e fontes, não inventado pela IA;
+- nenhum JSON técnico na interface;
+- relatório PDF disponível mesmo com estudo condicionado/incompleto;
+- cenário quantitativo só quando existe base matemática;
+- opção visível para aprofundar parâmetros em falta na Etapa 4;
+- referências numeradas no relatório.

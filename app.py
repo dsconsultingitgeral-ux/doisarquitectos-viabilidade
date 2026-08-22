@@ -272,13 +272,13 @@ with st.sidebar:
         ("4", "Regras do jogo", bool(study.get("rules"))),
         ("5", "Cálculos", bool(study.get("calculations"))),
         ("6", "Cenários", bool(study.get("scenarios"))),
-        ("7", "Relatório", bool(study.get("rules") and study.get("scenarios"))),
+        ("7", "Relatório", bool(study.get("rules"))),
     ]
     for n, name, done in labels:
         st.markdown(f"<div class='step'>{'✅' if done else '○'} <b>{n}. {name}</b></div>", unsafe_allow_html=True)
     st.divider()
     page = st.radio("Navegação", ["1 · Localização", "2 · Documentação", "3 · Pesquisa IA", "4 · Regras e condicionantes", "5 · Cálculos", "6 · Cenários", "7 · Relatório"], label_visibility="collapsed")
-    st.caption(f"IA principal: {GEMINI_MODEL} · V2.4")
+    st.caption(f"IA principal: {GEMINI_MODEL} · V2.6")
     if st.button("↺ Novo estudo / limpar dados", use_container_width=True):
         for key in ["study", "quick_docs", "all_docs"]:
             st.session_state.pop(key, None)
@@ -438,24 +438,23 @@ elif page.startswith("2"):
 
 elif page.startswith("3"):
     st.subheader("3. Pesquisa territorial e regulamentar")
-    st.write("A aplicação cruza a localização e, quando existam, os documentos analisados com fontes oficiais atuais. A documentação não é obrigatória.")
-    # Confirmação administrativa antes da pesquisa: a rua/morada indicada pelo utilizador nunca desaparece.
-    st.markdown("#### Localização a pesquisar")
-    c0,c1,c2 = st.columns([1.35,1,1])
+    st.write("A aplicação cruza a morada/rua, freguesia/localidade, município, coordenadas, polígono e, quando existam, os documentos analisados com fontes oficiais atuais.")
+
+    st.markdown("#### Localização efetivamente pesquisada")
+    c0,c1,c2 = st.columns([1.45,1,1])
     with c0:
         st.text_input("Rua / lugar / referência", value=study.get("location_text") or "", disabled=True)
     with c1:
         study["municipality"] = st.text_input("Município", value=study.get("municipality") or "")
     with c2:
         inferred_parish = study.get("parish") or _infer_parish_from_query(study.get("location_text",""), study.get("municipality",""))
-        study["parish"] = st.text_input("Freguesia / localidade", value=inferred_parish, placeholder="Pode corrigir antes de pesquisar")
-    if not study.get("parish"):
-        st.caption("A freguesia será também procurada automaticamente a partir da rua/localização e das coordenadas.")
+        study["parish"] = st.text_input("Freguesia / localidade", value=inferred_parish, placeholder="Será resolvida automaticamente se possível")
+    if study.get("lat") and study.get("lon"):
+        st.caption(f"Coordenadas usadas na pesquisa: {study['lat']:.6f}, {study['lon']:.6f}")
 
     candidates = _area_candidates(study.get("documents_analysis",{}))
     if study.get("estimated_area_m2"):
         candidates.append({"value":float(study["estimated_area_m2"]),"source":"Polígono desenhado no mapa","detail":"área cartográfica aproximada"})
-    # remove duplicados
     unique=[]
     for c in candidates:
         if not any(abs(x["value"]-c["value"])<0.01 for x in unique): unique.append(c)
@@ -463,85 +462,71 @@ elif page.startswith("3"):
 
     st.markdown("#### Área do terreno")
     if candidates:
-        if len(candidates) > 1:
-            vals = " · ".join(f"{c['value']:,.0f} m² ({c['source']})" for c in candidates)
-            st.warning("Foram identificadas áreas diferentes: " + vals + ". Escolha uma referência ou edite manualmente.")
-        options = [f"{c['value']:,.0f} m² — {c['source']}" for c in candidates] + ["Introduzir/editar manualmente"]
-        current_source = study.get("confirmed_area_source") or options[0]
-        idx = options.index(current_source) if current_source in options else 0
-        source_choice = st.selectbox("Referência de área", options, index=idx)
-        if source_choice != "Introduzir/editar manualmente":
-            chosen = candidates[options.index(source_choice)]["value"]
-        else:
-            chosen = float(study.get("confirmed_area_m2") or (candidates[0]["value"] if candidates else 0.0))
+        if len(candidates)>1:
+            st.warning("Foram identificadas áreas diferentes: " + " · ".join(f"{c['value']:,.0f} m² ({c['source']})" for c in candidates) + ". Escolha a referência correta ou edite manualmente.")
+        options=[f"{c['value']:,.0f} m² — {c['source']}" for c in candidates]+["Introduzir/editar manualmente"]
+        current=study.get("confirmed_area_source") or options[0]
+        idx=options.index(current) if current in options else 0
+        source_choice=st.selectbox("Referência de área",options,index=idx)
+        chosen=candidates[options.index(source_choice)]["value"] if source_choice!="Introduzir/editar manualmente" else float(study.get("confirmed_area_m2") or candidates[0]["value"])
     else:
-        st.info("Não foi encontrada uma área segura. Pode introduzi-la agora se a souber, ou continuar a pesquisa sem área confirmada.")
-        source_choice = "Introduzir/editar manualmente"
-        chosen = float(study.get("confirmed_area_m2") or 0.0)
-
-    area_input = st.number_input("Área do terreno a considerar (m²)", min_value=0.0, value=float(chosen), step=1.0, help="Campo editável. A confirmação é necessária para os cálculos, mas não para pesquisar o PDM e condicionantes.")
-    confirm_area = st.checkbox("Confirmo esta área para os cálculos", value=bool(study.get("confirmed_area_m2") and abs(float(study.get("confirmed_area_m2"))-area_input)<0.01))
-    if confirm_area and area_input > 0:
-        study["confirmed_area_m2"] = float(area_input)
-        study["confirmed_area_source"] = source_choice
+        st.info("Não foi encontrada uma área segura. Pode introduzi-la agora se a souber; a pesquisa territorial pode avançar mesmo sem área confirmada.")
+        source_choice="Introduzir/editar manualmente"; chosen=float(study.get("confirmed_area_m2") or 0.0)
+    area_input=st.number_input("Área do terreno a considerar (m²)",min_value=0.0,value=float(chosen),step=1.0)
+    confirm_area=st.checkbox("Confirmo esta área para os cálculos",value=bool(study.get("confirmed_area_m2") and abs(float(study.get("confirmed_area_m2"))-area_input)<0.01))
+    if confirm_area and area_input>0:
+        study["confirmed_area_m2"]=float(area_input); study["confirmed_area_source"]=source_choice
         st.success(f"Área confirmada: {area_input:,.0f} m².")
-    elif area_input > 0:
-        st.caption("Área preenchida mas ainda não confirmada para cálculos.")
 
-    can_search = bool(study.get("municipality") or study.get("location_text") or study.get("polygon_geojson"))
-    if st.button("🌐 Pesquisar e construir matriz urbanística", type="primary", disabled=not can_search):
-        # Só uma nova matriz válida marca a etapa como concluída.
-        study["rules"] = {}
-        status = st.status("A preparar pesquisa territorial…", expanded=True)
-        ctx = {k:study.get(k) for k in ["study_ref","location_text","municipality","parish","district","lat","lon","estimated_area_m2","confirmed_area_m2","confirmed_area_source","objective","priority"]}
+    can_search=bool(study.get("location_text") or study.get("municipality") or study.get("polygon_geojson"))
+    if st.button("🌐 Executar estudo urbanístico automático",type="primary",disabled=not can_search):
+        study["rules"]={}; study["calculations"]={}; study["scenarios"]=[]
+        status=st.status("A iniciar estudo urbanístico…",expanded=True)
+        ctx={k:study.get(k) for k in ["study_ref","location_text","municipality","parish","district","lat","lon","polygon_geojson","estimated_area_m2","confirmed_area_m2","confirmed_area_source","objective","priority"]}
         try:
-            status.write("1/4 · A preparar contexto do terreno e documentos relevantes.")
-            svc = GeminiService()
-            status.write("2/4 · A procurar PDM/IGT e fontes oficiais prioritárias.")
-            study["web_research"] = svc.web_research(ctx, study.get("documents_analysis",{}))
-            status.write("3/4 · A recolher referências e fundamentos rastreáveis.")
-            status.write("4/4 · A cruzar documentos + fontes e estruturar regras do jogo.")
-            candidate_rules = svc.synthesize_rules(ctx, study.get("documents_analysis",{}), study.get("web_research",{}))
-            if not _rules_valid(candidate_rules):
-                raise RuntimeError("A síntese recebida não contém uma matriz urbanística válida.")
-            study["rules"] = candidate_rules
-            used = ", ".join(study["web_research"].get("models_used", []) or [])
-            status.update(label=f"Pesquisa e matriz concluídas{f' · {used}' if used else ''}", state="complete", expanded=False)
-            st.success("Pesquisa concluída. A matriz urbanística está pronta para revisão na Etapa 4.")
+            status.write("1/3 · A confirmar localização administrativa e instrumento territorial aplicável.")
+            svc=GeminiService()
+            status.write("2/3 · A cruzar PDM/PP/PU, regras de edificabilidade e condicionantes com fontes oficiais.")
+            result=svc.research_rules(ctx,study.get("documents_analysis",{}),force_deep=True)
+            rules=result.get("rules") or {}
+            if not rules or not (rules.get("planning") or {}).get("instrument"):
+                raise RuntimeError("Não foi possível identificar um instrumento territorial aplicável com segurança.")
+            study["rules"]=rules
+            study["web_research"]={"citations":result.get("citations") or [],"queries":result.get("queries") or [],"model_used":result.get("model_used")}
+            ident=rules.get("identification") or {}
+            if ident.get("municipality"): study["municipality"]=ident["municipality"]
+            if ident.get("parish"): study["parish"]=ident["parish"]
+            status.write("3/3 · A calcular grau de confiança e preparar a ficha urbanística.")
+            score=(rules.get("overall_readiness") or {}).get("score",0)
+            status.update(label=f"Estudo territorial concluído · confiança técnica {score}%",state="complete",expanded=False)
+            st.success("A ficha urbanística foi construída. Reveja a Etapa 4 antes de calcular capacidade.")
         except Exception as e:
-            status.update(label="Pesquisa online incompleta", state="error", expanded=True)
-            study["web_research"] = study.get("web_research") or {"text":"", "citations":[], "queries":[], "error":str(e)}
-            try:
-                status.write("A tentar construir uma matriz provisória com a localização e documentação disponível.")
-                svc2 = GeminiService()
-                candidate_rules = svc2.synthesize_rules(ctx, study.get("documents_analysis",{}), study.get("web_research",{}))
-                if _rules_valid(candidate_rules):
-                    study["rules"] = candidate_rules
-                    st.warning("Pesquisa online incompleta, mas foi criada uma matriz provisória. Parâmetros sem fonte confirmada ficam A CONFIRMAR.")
-                else:
-                    raise RuntimeError("Não foi possível estruturar uma matriz provisória válida.")
-            except Exception as e2:
-                study["rules"] = {}
-                st.error(f"Não foi possível concluir a matriz urbanística: {e2}")
-                st.info("Pode repetir apenas esta pesquisa mais tarde; a localização e a documentação permanecem guardadas.")
+            status.update(label="Não foi possível concluir automaticamente o estudo",state="error",expanded=True)
+            st.error(str(e))
+            st.info("A localização, área e documentos permanecem guardados. Não são geradas conclusões falsas quando faltam dados oficiais.")
 
-    wr = study.get("web_research") or {}
-    if wr.get("text"):
-        st.markdown("#### Síntese da pesquisa")
-        clean = str(wr.get("text",""))
-        clean = clean.replace("```python", "").replace("```json", "").replace("```", "")
-        st.write(clean[:12000])
-    if wr.get("citations"):
-        st.markdown("#### Fontes oficiais/localizadas")
-        for src in wr["citations"][:25]:
-            title = src.get("title") or src.get("url")
-            st.markdown(f"- [{title}]({src.get('url')})")
-    if _rules_valid(study.get("rules")):
-        confirmed, numeric, total = _parameter_coverage(study.get("rules"))
-        if numeric == 0:
-            st.warning("A matriz foi estruturada, mas ainda não contém parâmetros urbanísticos quantitativos confirmados. Antes de calcular/cenarizar, repita/aprofunde a pesquisa ou confirme parâmetros na Etapa 4.")
+    rules=study.get("rules") or {}
+    if rules:
+        ident=rules.get("identification") or {}; planning=rules.get("planning") or {}; viability=rules.get("viability") or {}; ready=rules.get("overall_readiness") or {}
+        st.markdown("#### Resultado rápido")
+        c1,c2,c3,c4=st.columns(4)
+        c1.metric("Município",ident.get("municipality") or study.get("municipality") or "A confirmar")
+        c2.metric("Freguesia/localidade",ident.get("parish") or study.get("parish") or "A confirmar")
+        c3.metric("Categoria",planning.get("subcategory") or planning.get("category") or "A confirmar")
+        c4.metric("Confiança",f"{int(ready.get('score') or 0)}%")
+        status_label=(viability.get("status") or "inconclusiva").replace("_"," ").title()
+        st.info(f"**Viabilidade preliminar:** {status_label}. {viability.get('summary') or ''}")
+        params=rules.get("parameters") or {}
+        found=[]
+        for k,label in PARAM_LABELS.items():
+            v=params.get(k) or {}
+            if v.get("value") not in (None,"","None") or v.get("value_text"):
+                val=v.get("value") if v.get("value") not in (None,"","None") else v.get("value_text")
+                found.append({"Regra":label,"Resultado":val,"Artigo":v.get("article") or "","Confiança":f"{int(v.get('confidence') or 0)}%","Ref.":_refs_text(v.get("sources"))})
+        if found:
+            st.dataframe(pd.DataFrame(found),use_container_width=True,hide_index=True)
         else:
-            st.success(f"✅ Matriz urbanística pronta para revisão: {numeric}/{total} parâmetros com valor. Pode avançar para **4. Regras do jogo**.")
+            st.warning("O instrumento foi identificado, mas ainda não foi possível extrair parâmetros concretos. A Etapa 4 permite uma verificação aprofundada automática.")
 
 elif page.startswith("4"):
     st.subheader("4. Regras do jogo e condicionantes")
@@ -569,8 +554,31 @@ elif page.startswith("4"):
         if p.get("basis"):
             st.caption(str(p.get("basis")))
 
+        ready=rules.get("overall_readiness") or {}
+        cscore,cstat=st.columns([1,3])
+        cscore.metric("Confiança técnica",f"{int(ready.get('score') or 0)}%")
+        cstat.write(f"**Estado:** {(ready.get('label') or 'insuficiente').replace('_',' ').title()}")
+        cstat.caption(ready.get("reason") or "")
         if numeric == 0:
-            st.error("A pesquisa não encontrou parâmetros quantitativos suficientes para um estudo de capacidade. Não serão apresentados cálculos ou cenários numéricos até existirem regras confirmadas.")
+            st.warning("O instrumento territorial foi identificado, mas faltam valores quantitativos confirmados. A aplicação pode fazer uma verificação aprofundada automática dos artigos/regulamentos antes de desistir.")
+            if st.button("🔎 Aprofundar automaticamente parâmetros em falta",type="primary"):
+                with st.spinner("A procurar os artigos e parâmetros concretos nas fontes oficiais…"):
+                    try:
+                        svc=GeminiService()
+                        ctx={k:study.get(k) for k in ["location_text","municipality","parish","district","lat","lon","confirmed_area_m2","confirmed_area_source"]}
+                        rr=svc.deepen_missing_parameters(ctx,rules)
+                        newrules=rr.get("rules") or rules
+                        # incorporar novas citações e renumerar
+                        citations=list((study.get("web_research") or {}).get("citations") or [])
+                        for src in rr.get("citations") or []:
+                            if src.get("url") and not any(x.get("url")==src.get("url") for x in citations):
+                                src=dict(src); src["ref"]=len(citations)+1; src["label"]=f"[{len(citations)+1}]"; citations.append(src)
+                        study.setdefault("web_research",{})["citations"]=citations
+                        study["rules"]=newrules; study["calculations"]={}; study["scenarios"]=[]
+                        st.success("Verificação aprofundada concluída.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Não foi possível aprofundar automaticamente agora: {e}")
         else:
             st.success(f"Foram encontrados valores em {numeric}/{total} parâmetros urbanísticos principais.")
 
@@ -592,12 +600,14 @@ elif page.startswith("4"):
         rows=[]
         for k in PARAM_LABELS:
             v=(rules.get("parameters",{}) or {}).get(k) or {}
-            val=v.get("value")
+            val=v.get("value"); txt=v.get("value_text") or ""
             unit=v.get("unit") or ""
-            display="A confirmar" if val in (None,"","None") else f"{val} {unit}".strip()
+            display=(f"{val} {unit}".strip() if val not in (None,"","None") else (txt or "A confirmar"))
             rows.append({
-                "Parâmetro":PARAM_LABELS[k], "Valor":display,
+                "Parâmetro":PARAM_LABELS[k], "Valor / regra":display,
                 "Estado":(v.get("status") or "a_confirmar").replace("_"," "),
+                "Artigo":v.get("article") or "",
+                "Confiança":f"{int(v.get('confidence') or 0)}%",
                 "Fundamento":v.get("basis") or "", "Ref.":_refs_text(v.get("sources"))
             })
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
@@ -748,13 +758,17 @@ elif page.startswith("6"):
 
 elif page.startswith("7"):
     st.subheader("7. Relatório e exportação")
-    if not (study.get("rules") and study.get("scenarios")):
-        st.info("Complete pelo menos as regras, os cálculos e os cenários.")
+    if not study.get("rules"):
+        st.info("Execute pelo menos a pesquisa territorial para gerar um relatório preliminar.")
     else:
-        st.success("Estudo pronto para apresentação preliminar.")
-        pdf = build_pdf(dict(study))
-        st.download_button("📄 Descarregar relatório PDF", data=pdf, file_name=f"{study.get('study_ref','ESTUDO')}_viabilidade.pdf", mime="application/pdf", use_container_width=True)
-        st.caption("O relatório final contém as fontes numeradas [1], [2], … e não inclui JSON técnico.")
+        score=((study.get("rules") or {}).get("overall_readiness") or {}).get("score",0)
+        if study.get("scenarios"):
+            st.success(f"Relatório completo disponível · confiança técnica {score}%.")
+        else:
+            st.warning(f"Relatório preliminar disponível · confiança técnica {score}%. Os capítulos de cálculo/cenários indicarão explicitamente o que ainda falta confirmar.")
+        pdf=build_pdf(dict(study))
+        st.download_button("📄 Descarregar relatório PDF",data=pdf,file_name=f"{study.get('study_ref','ESTUDO')}_viabilidade.pdf",mime="application/pdf",use_container_width=True)
+        st.caption("O PDF contém referências numeradas [1], [2], … e nunca inclui JSON técnico.")
         st.markdown("#### Fontes")
         for src in (study.get("web_research",{}) or {}).get("citations",[]):
             st.markdown(f"**[{src.get('ref')}]** [{src.get('title') or src.get('url')}]({src.get('url')})")
