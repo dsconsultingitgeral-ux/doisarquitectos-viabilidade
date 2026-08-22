@@ -1,4 +1,26 @@
-# doisarquitetos — Pré‑Viabilidade Urbanística V4
+# doisarquitetos — Pré‑Viabilidade Urbanística V4.2 Plus.2 Plus
+
+
+## Novidades da revisão V4.1
+
+- **Logo no topo e na barra lateral.** Se existir `assets/logo.png`, `logo.webp` ou `logo.jpg`, a aplicação usa esse ficheiro automaticamente; caso contrário usa o `logo.svg` incluído.
+- **Mapa no Módulo 01** com geocodificação inicial da morada para validação visual.
+- **Modo sem documentos:** o utilizador pode avançar apenas com a localização. A IA produz um estudo preliminar baseado em pesquisa oficial, sem inventar área, limites ou artigo.
+- A geocodificação é apenas auxiliar e nunca é usada para inferir a geometria ou área da parcela.
+- Mantém integralmente toda a lógica da V4: Master Prompt, fontes `[1]`, `[2]`, `[3]`, links efetivamente consultados, cenários e relatório PDF.
+
+### Colocar o logo real
+
+Basta substituir/adicionar um destes ficheiros:
+
+```text
+assets/logo.png
+assets/logo.webp
+assets/logo.jpg
+```
+
+O código dá prioridade ao PNG, depois WEBP/JPG, e usa o SVG de fallback.
+
 
 Aplicação Streamlit com 4 módulos:
 
@@ -50,12 +72,12 @@ Main file path: app.py
 Nas definições da aplicação, abra **Secrets** e cole:
 
 ```toml
-OPENAI_API_KEY = "sk-..."
-OPENAI_MODEL = "gpt-5.6-terra"
+OPENAI_API_KEY = ""
+OPENAI_MODEL = ""
 
 [auth]
-username = "admin1"
-password = "doisarquitetos"
+username = ""
+password = ""
 ```
 
 Pode alterar utilizador e password.
@@ -111,7 +133,7 @@ Geração do relatório PDF.
 Por defeito:
 
 ```toml
-OPENAI_MODEL = "gpt-5.6-terra"
+OPENAI_MODEL = ""
 ```
 
 Pode trocar por outro modelo compatível com o fluxo, alterando apenas o Secret.

@@ -8,7 +8,7 @@ def load_master_prompt() -> str:
 def load_source_addendum() -> str:
     return (ROOT / "prompts" / "source_addendum.txt").read_text(encoding="utf-8")
 
-def build_prompt(location: str, municipality: str = "", parish: str = "", locality: str = "", article: str = "", known_area: str = "") -> str:
+def build_prompt(location: str, municipality: str = "", parish: str = "", locality: str = "", article: str = "", known_area: str = "", geo_lat=None, geo_lon=None, geo_display_name: str = "", has_documents: bool = False) -> str:
     master = load_master_prompt()
     addendum = load_source_addendum()
 
@@ -31,6 +31,19 @@ Freguesia indicada pelo utilizador: {parish or "NÃO INDICADA"}
 Localidade indicada pelo utilizador: {locality or "NÃO INDICADA"}
 Artigo matricial indicado: {article or "NÃO INDICADO"}
 Área conhecida/indicada: {known_area or "NÃO INDICADA"}
+Geocodificação auxiliar: {geo_display_name or "NÃO DISPONÍVEL"}
+Coordenadas auxiliares: {f"{geo_lat:.6f}, {geo_lon:.6f}" if geo_lat is not None and geo_lon is not None else "NÃO DISPONÍVEIS"}
+Documentos específicos da parcela anexados: {"SIM" if has_documents else "NÃO"}
+
+REGRA ESPECIAL QUANDO NÃO EXISTIREM DOCUMENTOS:
+Se não existirem documentos anexados, NÃO interrompas o estudo. Produz na mesma um ESTUDO PRELIMINAR DE LOCALIZAÇÃO E VIABILIDADE com base na localização fornecida, geocodificação apenas como ponto de partida e pesquisa externa obrigatória em fontes oficiais.
+Nesse caso:
+- declara explicitamente que os limites cadastrais, área jurídica, artigo matricial e geometria da parcela NÃO estão confirmados;
+- não inventes área nem uses o ponto geocodificado para inferir limites;
+- procura PDM, regulamento, ordenamento, condicionantes, REN, RAN, ruído, incêndio, património, recursos hídricos, servidões e instrumentos territoriais aplicáveis à zona;
+- apresenta aquilo que pode ser determinado ao nível da localização/zona;
+- marca como A CONFIRMAR tudo o que dependa do polígono exato da parcela;
+- ainda assim produz uma conclusão útil e um relatório preliminar, indicando claramente quais documentos o utilizador deverá obter para elevar a confiança.
 
 A informação contida nos documentos anexados tem prioridade para confirmar, corrigir ou colocar em conflito estes dados.
 ============================================================

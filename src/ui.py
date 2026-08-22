@@ -4,11 +4,11 @@ import streamlit as st
 def inject_css():
     st.markdown("""
     <style>
-      .block-container {max-width: 1220px; padding-top: 2rem; padding-bottom: 4rem;}
+      .block-container {max-width: 1240px; padding-top: 1.6rem; padding-bottom: 4rem;}
       .da-kicker {font-size:12px; letter-spacing:.14em; font-weight:800; color:#6B7280;}
       .da-title {font-size:34px; line-height:1.08; font-weight:850; margin:.25rem 0 .5rem;}
       .da-sub {color:#6B7280; font-size:15px; margin-bottom:1rem;}
-      .da-card {background:white;border:1px solid #E5E7EB;border-radius:18px;padding:18px 20px;box-shadow:0 1px 2px rgba(0,0,0,.03);height:100%;}
+      .da-card {background:white;border:1px solid #E5E7EB;border-radius:20px;padding:20px 22px;box-shadow:0 8px 28px rgba(17,24,39,.055);height:100%;}
       .da-card-label {font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#6B7280;font-weight:700;}
       .da-card-value {font-size:27px;font-weight:850;margin-top:3px;color:#111827;}
       .da-card-note {font-size:12px;color:#6B7280;margin-top:2px;}
@@ -20,11 +20,32 @@ def inject_css():
       .source-box {background:#F9FAFB;border-left:4px solid #111827;padding:12px 14px;margin:8px 0;border-radius:8px;}
       div[data-testid="stButton"] button {border-radius:12px;font-weight:700;}
       div[data-testid="stDownloadButton"] button {border-radius:12px;font-weight:700;}
+    .da-hero {background:linear-gradient(135deg,#111827 0%,#263244 100%);color:white;border-radius:24px;padding:28px 30px;margin:8px 0 20px;box-shadow:0 15px 45px rgba(17,24,39,.13);}
+      .da-hero .big {font-size:28px;font-weight:850;line-height:1.15;}
+      .da-hero .small {opacity:.78;margin-top:7px;font-size:14px;}
+      .map-note {font-size:12px;color:#6B7280;margin-top:6px;}
     </style>
     """, unsafe_allow_html=True)
 
+def brand_logo(compact: bool = False):
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    candidates = [
+        root / "assets" / "logo.png",
+        root / "assets" / "logo.webp",
+        root / "assets" / "logo.jpg",
+        root / "assets" / "logo.svg",
+    ]
+    logo = next((p for p in candidates if p.exists()), None)
+    if logo:
+        st.image(str(logo), width=220 if compact else 300)
+
 def header(title: str, subtitle: str):
-    st.markdown(f'<div class="da-kicker">PRÉ-VIABILIDADE URBANÍSTICA · V4</div><div class="da-title">{title}</div><div class="da-sub">{subtitle}</div>', unsafe_allow_html=True)
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        st.markdown(f'<div class="da-kicker">PRÉ-VIABILIDADE URBANÍSTICA · V4</div><div class="da-title">{title}</div><div class="da-sub">{subtitle}</div>', unsafe_allow_html=True)
+    with c2:
+        brand_logo(compact=True)
 
 def steps(current: int):
     labels = ["01 · Localização", "02 · Documentos", "03 · Análise IA", "04 · Potencial"]
