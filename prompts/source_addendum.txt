@@ -1,0 +1,103 @@
+============================================================
+ADDENDUM V4 — FONTES, LINKS E RASTREABILIDADE
+============================================================
+
+Este addendum é OBRIGATÓRIO e complementa, sem substituir nem simplificar, o MASTER PROMPT acima.
+
+A — METODOLOGIA DE CITAÇÃO
+
+1. Todas as conclusões urbanísticas materiais devem ser acompanhadas por referências numeradas no formato [1], [2], [3]...
+
+2. Utiliza a mesma referência [n] sempre que a mesma fonte sustente mais do que uma conclusão.
+
+3. As referências devem aparecer imediatamente após a afirmação que sustentam.
+
+Exemplos:
+
+O terreno encontra-se classificado como Espaço Central Tipo 2 [3].
+
+A implantação máxima corresponde a 50% da área edificável [4].
+
+A carta municipal não evidencia incidência de REN sobre o polígono analisado [5].
+
+4. Não cries referências que não correspondam a uma fonte efetivamente consultada.
+
+5. Não inventes URLs, artigos, páginas, datas, entidades ou títulos.
+
+B — FONTES ONLINE EFETIVAMENTE ACEDIDAS
+
+No final do relatório cria obrigatoriamente a secção:
+
+FONTES ONLINE ACEDIDAS
+
+Para cada página, documento ou recurso online que TENHAS EFETIVAMENTE ABERTO/CONSULTADO durante a análise, indica:
+
+[n] Entidade — Título
+Tipo: Fonte oficial / Fonte secundária
+URL: link direto efetivamente consultado
+Data/versão: quando disponível
+Data de consulta: data atual
+Utilizada para: conclusões/parâmetros sustentados
+
+Não coloques nesta secção links que apenas conheças de memória ou que não tenham sido efetivamente consultados.
+
+C — DOCUMENTOS FORNECIDOS
+
+Cria ainda:
+
+DOCUMENTOS FORNECIDOS E ANALISADOS
+
+Para cada documento fornecido:
+
+[n] Nome do documento
+Tipo
+Entidade/autoria, quando disponível
+Data
+Página(s)/folha(s) relevantes
+Utilizado para: conclusões sustentadas
+
+D — HIERARQUIA VISUAL DAS FONTES
+
+Identifica as fontes, quando aplicável, como:
+
+🏛️ FONTE OFICIAL
+📎 DOCUMENTO DO PROCESSO
+🌐 FONTE SECUNDÁRIA
+
+Fontes secundárias nunca podem ser a única base para uma regra urbanística quando exista fonte oficial aplicável.
+
+E — RASTREABILIDADE DO RESULTADO EXECUTIVO
+
+Na CONCLUSÃO EXECUTIVA e na MATRIZ FINAL DE REGRAS, cada um dos seguintes elementos deve conter pelo menos uma referência [n] quando exista evidência:
+
+- Localização;
+- Área;
+- Classificação do solo;
+- Categoria/subcategoria;
+- Usos admissíveis;
+- Índice/percentagem de implantação;
+- Construção/edificabilidade;
+- Número de pisos;
+- Altura;
+- Afastamentos;
+- Estacionamento;
+- REN;
+- RAN;
+- Recursos hídricos;
+- Incêndio;
+- Património;
+- Ruído;
+- Infraestruturas;
+- Servidões;
+- Cenários;
+- Recomendação final.
+
+F — INCERTEZA
+
+Se uma conclusão não puder ser sustentada por fonte suficientemente forte, escreve:
+
+FONTE NÃO CONFIRMADA
+
+e reduz explicitamente o nível de confiança.
+
+Nunca transformes ausência de prova em prova de ausência.

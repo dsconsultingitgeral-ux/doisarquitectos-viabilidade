@@ -1,7 +1,5 @@
 streamlit>=1.38
-streamlit-folium>=0.22
-folium>=0.17
-google-genai>=1.0
-pandas>=2.2
+openai>=1.55
 reportlab>=4.2
-requests>=2.32
+pypdf>=5.0
+python-dotenv>=1.0
