@@ -1,0 +1,13 @@
+V2.5 — estabilização funcional de nível profissional
+
+Principais correções:
+- Rua/morada preservada em todas as etapas e freguesia inferida/corrigível antes da pesquisa.
+- Pesquisa territorial dividida em duas frentes paralelas: planeamento/regras + condicionantes/servidões.
+- Fallback inclui Gemini 2.5 Flash para maior disponibilidade.
+- Matriz só fica concluída quando existe fundamento/referência ou parâmetro regulamentar real.
+- Etapa 4 totalmente em português, com referências [n] e revisão técnica manual opcional.
+- Etapa 5 sem JSON; só calcula quando existem área + parâmetros regulamentares disponíveis.
+- Etapa 6 deixa de mostrar None e bloqueia cenários quantitativos sem base de cálculo.
+- Relatório PDF inclui referências [1], [2]... junto de usos, parâmetros, condicionantes e enquadramento.
+- Removido download JSON da interface final.
+- Resultado da pesquisa mantém documentação opcional e não inventa valores em falta.

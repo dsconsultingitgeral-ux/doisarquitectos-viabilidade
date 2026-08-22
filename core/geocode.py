@@ -36,7 +36,7 @@ def _arcgis(query: str):
         "f": "json",
         "countryCode": "PRT",
         "maxLocations": 5,
-        "outFields": "Match_addr,LongLabel,City,Subregion,Region,Postal",
+        "outFields": "Match_addr,LongLabel,City,Subregion,Region,Postal,Neighborhood,District",
     }
     r = requests.get(url, params=params, headers=HEADERS, timeout=10)
     r.raise_for_status()
@@ -50,6 +50,7 @@ def _arcgis(query: str):
         city = attrs.get("City") or ""
         region = attrs.get("Region") or ""
         subregion = attrs.get("Subregion") or ""
+        neighborhood = attrs.get("Neighborhood") or attrs.get("District") or ""
         out.append({
             "lat": str(loc["y"]),
             "lon": str(loc["x"]),
@@ -58,6 +59,8 @@ def _arcgis(query: str):
                 "city": city,
                 "town": city,
                 "municipality": subregion or city,
+                "suburb": neighborhood,
+                "village": neighborhood,
                 "state": region,
                 "postcode": attrs.get("Postal") or "",
             },

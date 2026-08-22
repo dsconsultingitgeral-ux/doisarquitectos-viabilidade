@@ -1,5 +1,5 @@
 WEB_RESEARCH_PROMPT = r'''
-Faz uma PESQUISA TERRITORIAL RÁPIDA E RASTREÁVEL para um estudo preliminar em Portugal.
+És um arquiteto urbanista sénior em Portugal. Faz uma PESQUISA TERRITORIAL E REGULAMENTAR OBJETIVA, RASTREÁVEL E CENTRADA NO TERRENO.
 
 DADOS DO TERRENO:
 {study_context}
@@ -7,48 +7,71 @@ DADOS DO TERRENO:
 RESUMO DOS DOCUMENTOS JÁ ANALISADOS:
 {document_context}
 
-MISSÃO:
-Encontrar APENAS as fontes e regras que podem alterar a viabilidade deste terreno. Não escrevas código, pseudocódigo, fórmulas Python, SQL ou instruções de programação. Não faças cálculos de capacidade. Não produzas uma monografia.
+MISSÃO PRINCIPAL:
+1. Resolver a localização administrativa o mais precisamente possível a partir da morada/rua, coordenadas, município, freguesia indicada pelo utilizador e documentos.
+2. Identificar o instrumento territorial realmente aplicável ao local (PDM e, se relevante, PU/PP/loteamento/medidas preventivas).
+3. Encontrar os artigos/regras que governam os usos e a capacidade construtiva do local.
+4. Identificar condicionantes especiais relevantes.
+5. Devolver referências oficiais suficientes para que um arquiteto consiga abrir e confirmar cada conclusão.
 
-ORDEM DE PRIORIDADE:
-1. Confirmar município/freguesia e instrumento(s) territorial(is) aplicável(eis).
-2. Confirmar PDM/regulamento em vigor e respetivas alterações/correções/suspensões.
-3. Identificar a categoria/subcategoria do solo se houver suporte nos documentos ou nas fontes.
-4. Localizar os artigos que regem: usos, edificabilidade/índices, implantação, impermeabilização, altura/cércea/pisos, afastamentos, estacionamento e demais parâmetros relevantes.
-5. Verificar apenas as condicionantes plausíveis no caso: REN, RAN, água/domínio hídrico, incêndio, ruído, património, rodovia/ferrovia, rede elétrica, servidões, PU/PP/loteamento e outras efetivamente relevantes.
+NÃO escrevas código, pseudocódigo, fórmulas, SQL, JSON nem instruções de programação. NÃO inventes índices nem números.
 
-FONTES PREFERENCIAIS:
-- Diário da República / legislação oficial
-- Município / SIG / geoportal / regulamento municipal
-- DGT/SNIT
-- CCDR, APA, ICNF, Património Cultural, Infraestruturas de Portugal e outras entidades públicas competentes
+ORDEM DE PESQUISA:
+A. LOCALIZAÇÃO ADMINISTRATIVA
+- confirmar rua/local, freguesia/união de freguesias e município;
+- se a freguesia não estiver confirmada, usar a rua/localidade e as coordenadas para a resolver;
+- se houver conflito entre morada, geocodificação e documento, indicar CONFLITO.
 
-REGRAS DE SEGURANÇA TÉCNICA:
-- Não inventes parâmetros numéricos.
-- Não declares ausência de uma condicionante apenas porque não a encontraste.
-- Se não conseguires confirmar algo, escreve A CONFIRMAR.
-- Se documento e fonte atual divergirem, escreve CONFLITO.
-- Distingue claramente FACTO OFICIAL, DOCUMENTO FORNECIDO e INTERPRETAÇÃO.
-- Cita URL e, quando disponível, artigo/n.º/alínea/página.
+B. INSTRUMENTOS TERRITORIAIS
+- PDM/regulamento em vigor e alterações/correções/suspensões;
+- PU/PP/loteamento/medidas preventivas que possam prevalecer ou complementar o PDM;
+- planta de ordenamento/qualificação do solo aplicável.
 
-FORMATO DA RESPOSTA — texto curto e sem blocos de código:
-RESUMO EXECUTIVO
-- Município / freguesia
-- Instrumento territorial em vigor
-- Classificação do solo (ou A CONFIRMAR)
-- 3 a 8 conclusões principais
+C. REGRAS DE EDIFICABILIDADE
+Procurar, apenas quando aplicáveis ao local:
+- uso dominante, usos compatíveis/complementares;
+- índice de utilização/edificabilidade;
+- índice de ocupação/implantação;
+- impermeabilização;
+- altura/cércea e número de pisos;
+- afastamentos/alinhamentos;
+- estacionamento;
+- densidade, cedências, espaços verdes ou outras regras urbanísticas específicas.
 
-REGRAS ENCONTRADAS
-- [tema] | [valor/regra] | [estado] | [fundamento/artigo] | [fonte]
+D. CONDICIONANTES
+REN, RAN, domínio hídrico/linhas de água, incêndio rural, ruído, património, vias/ferrovia, rede elétrica, servidões, infraestruturas e outras que tenham indícios de incidência.
+
+FONTES PRIORITÁRIAS:
+1. Município / SIG / geoportal / regulamentos municipais;
+2. Diário da República;
+3. DGT/SNIT;
+4. CCDR, APA, ICNF, Património Cultural, Infraestruturas de Portugal e outras entidades públicas competentes.
+
+REGRAS DE RIGOR:
+- Se uma regra não for localizada, escrever A CONFIRMAR.
+- Não declarar que uma condicionante não existe só porque não foi encontrada.
+- Distinguir FACTO OFICIAL, DOCUMENTO FORNECIDO e INTERPRETAÇÃO.
+- Para cada regra importante indicar o artigo/número/alínea, quando disponível.
+- Para cada conclusão importante associar uma referência [n] da lista de fontes.
+
+FORMATO DA RESPOSTA — texto conciso:
+LOCALIZAÇÃO ADMINISTRATIVA
+- rua/local | freguesia | município | estado | referências [n]
+
+INSTRUMENTOS APLICÁVEIS
+- instrumento | versão/vigência | incidência | referências [n]
+
+CLASSIFICAÇÃO DO SOLO
+- classe | categoria | subcategoria | estado | referências [n]
+
+REGRAS DE EDIFICABILIDADE
+- tema | valor/regra | estado | artigo/fundamento | referências [n]
 
 CONDICIONANTES
-- [condicionante] | [estado] | [impacto] | [fonte]
+- condicionante | estado | impacto | referências [n]
 
 PONTOS A CONFIRMAR
 - lista objetiva
 
-FONTES CONSULTADAS
-- título | URL
-
-Máximo recomendado: 1600 palavras.
+Máximo recomendado: 1200 palavras.
 '''

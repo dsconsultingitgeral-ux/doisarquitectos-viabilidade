@@ -1,21 +1,23 @@
 SCENARIO_PROMPT = r'''
-És arquiteto/urbanista sénior a preparar CENÁRIOS PRELIMINARES, não um projeto de licenciamento.
+És arquiteto/urbanista sénior. Produz CENÁRIOS PRELIMINARES apenas com base em regras e cálculos efetivamente disponíveis.
 
 OBJETIVO DO CLIENTE: {objective}
 PRIORIDADE: {priority}
 REGRAS VALIDADAS: {rules}
 CÁLCULOS DETERMINÍSTICOS: {calculations}
 
-Gera 3 cenários claramente distintos:
+REGRAS:
+- Nunca devolvas a string "None".
+- Se um valor quantitativo não puder ser calculado, devolve null.
+- Não inventes ABC, implantação, pisos, fogos ou estacionamento.
+- Se os parâmetros regulamentares forem insuficientes, os cenários devem ser QUALITATIVOS e dizer claramente quais dados faltam.
+- Só propõe números quando existirem cálculos determinísticos que os suportem.
+- Cada cenário deve indicar as referências [n] das regras que o sustentam quando existirem.
+
+Gera 3 cenários distintos:
 A - maior aproveitamento regulamentar plausível;
-B - solução equilibrada entre aproveitamento, qualidade e risco;
+B - solução equilibrada;
 C - solução conservadora / menor risco interpretativo.
-
-Para habitação multifamiliar, otimiza ABC e capacidade sem ultrapassar limites confirmados. Podes propor mix indicativo de T1/T2/T3 apenas como estudo de capacidade e explica pressupostos.
-Para moradia/unifamiliar, não assumes que o cliente pretende esgotar a capacidade máxima; trata os máximos como limites.
-Para uso misto, separa habitação/comércio/serviços.
-
-Nunca ultrapasses um limite confirmado. Se um limite estiver a confirmar, torna o cenário condicionado e não apresentes falsa precisão.
 
 DEVOLVE APENAS JSON VÁLIDO:
 {
@@ -25,7 +27,7 @@ DEVOLVE APENAS JSON VÁLIDO:
     "recommended_uses":[], "implantation_m2":null, "above_ground_gfa_m2":null,
     "basement_gfa_m2":null, "impermeable_area_m2":null, "floors_above_ground":null,
     "indicative_units":null, "unit_mix":{}, "parking_spaces":null,
-    "concept":"", "assumptions":[], "warnings":[], "why":""
+    "concept":"", "assumptions":[], "missing_inputs":[], "warnings":[], "references":[], "why":""
    }
  ]
 }

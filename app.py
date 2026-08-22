@@ -131,7 +131,19 @@ def _rules_valid(rules):
         return False
     if rules.get("parse_error") or rules.get("raw_text"):
         return False
-    return any(k in rules for k in ["planning", "identification", "parameters", "constraints", "overall_readiness"])
+    planning = rules.get("planning") or {}
+    if not (planning.get("instrument") or (rules.get("identification") or {}).get("municipality")):
+        return False
+    # Uma matriz não é considerada concluída se for apenas um esqueleto sem qualquer fundamento
+    # ou valor regulamentar. Isto evita o falso “✅ concluído” observado nos testes.
+    refs = list(planning.get("sources") or [])
+    refs += list((rules.get("identification") or {}).get("sources") or [])
+    numeric = False
+    for v in (rules.get("parameters") or {}).values():
+        if isinstance(v, dict):
+            if v.get("sources"): refs += list(v.get("sources") or [])
+            if v.get("value") not in (None, "", "None"): numeric = True
+    return bool(refs or numeric)
 
 def _human_document_details(doc):
     lines = []
@@ -156,6 +168,61 @@ def _human_document_details(doc):
     if doc.get("constraints"):
         lines.append("Condicionantes identificadas: " + " · ".join(map(str, doc.get("constraints")[:6])))
     return lines
+
+
+PARAM_LABELS = {
+    "utilization_index": "Índice de utilização / edificabilidade",
+    "occupation_index": "Índice de ocupação / implantação",
+    "impermeability_index": "Índice / percentagem de impermeabilização",
+    "max_height_m": "Altura / cércea máxima",
+    "max_floors_above_ground": "Pisos máximos acima do solo",
+    "max_floors_below_ground": "Pisos máximos abaixo do solo",
+    "front_setback_m": "Afastamento frontal",
+    "side_setback_m": "Afastamento lateral",
+    "rear_setback_m": "Afastamento posterior",
+    "parking_rule": "Regra de estacionamento",
+}
+
+def _infer_parish_from_query(query: str, municipality: str = "") -> str:
+    parts = [x.strip() for x in (query or "").split(",") if x.strip()]
+    if len(parts) >= 3:
+        candidate = parts[-2]
+        if candidate and candidate.lower() != (municipality or "").lower() and not any(ch.isdigit() for ch in candidate):
+            return candidate
+    return ""
+
+def _refs_text(value) -> str:
+    if not value:
+        return ""
+    vals = value if isinstance(value, list) else [value]
+    out=[]
+    for v in vals:
+        if isinstance(v, dict):
+            v = v.get("label") or v.get("ref") or v.get("url")
+        if isinstance(v, int): v=f"[{v}]"
+        txt=str(v)
+        if txt.isdigit(): txt=f"[{txt}]"
+        if txt and txt not in out: out.append(txt)
+    return " ".join(out)
+
+def _parameter_coverage(rules: dict):
+    params=(rules or {}).get("parameters",{}) or {}
+    keys=list(PARAM_LABELS)
+    confirmed=0
+    numeric=0
+    for k in keys:
+        v=params.get(k) or {}
+        status=str(v.get("status") or "").lower() if isinstance(v,dict) else ""
+        val=v.get("value") if isinstance(v,dict) else None
+        if status in ("confirmado","calculado","confirmado_utilizador"):
+            confirmed += 1
+        if val not in (None, "", "None"):
+            numeric += 1
+    return confirmed, numeric, len(keys)
+
+def _calc_inputs(rules: dict):
+    ci=(rules or {}).get("calculation_inputs",{}) or {}
+    return {k:ci.get(k) for k in ["utilization_index","occupation_index","impermeability_index","max_height_m","max_floors"]}
 
 def login():
     if st.session_state.get("authenticated"):
@@ -251,7 +318,9 @@ if page.startswith("1"):
                     study["lat"], study["lon"] = float(r["lat"]), float(r["lon"])
                     ad = r.get("address", {})
                     study["municipality"] = ad.get("municipality") or ad.get("city") or ad.get("town") or ""
-                    study["parish"] = ad.get("suburb") or ad.get("village") or ad.get("city_district") or ""
+                    study["parish"] = (ad.get("suburb") or ad.get("village") or ad.get("city_district") or ad.get("neighbourhood") or ad.get("quarter") or "")
+                    if not study["parish"]:
+                        study["parish"] = _infer_parish_from_query(loc, study["municipality"])
                     study["district"] = ad.get("state") or ""
                     study["last_geocoded_query"] = loc.strip()
                     study["geocode_display_name"] = r.get("display_name", loc)
@@ -370,9 +439,18 @@ elif page.startswith("2"):
 elif page.startswith("3"):
     st.subheader("3. Pesquisa territorial e regulamentar")
     st.write("A aplicação cruza a localização e, quando existam, os documentos analisados com fontes oficiais atuais. A documentação não é obrigatória.")
-    c1,c2 = st.columns(2)
-    c1.metric("Município", study.get("municipality") or "A confirmar")
-    c2.metric("Freguesia", study.get("parish") or "A confirmar")
+    # Confirmação administrativa antes da pesquisa: a rua/morada indicada pelo utilizador nunca desaparece.
+    st.markdown("#### Localização a pesquisar")
+    c0,c1,c2 = st.columns([1.35,1,1])
+    with c0:
+        st.text_input("Rua / lugar / referência", value=study.get("location_text") or "", disabled=True)
+    with c1:
+        study["municipality"] = st.text_input("Município", value=study.get("municipality") or "")
+    with c2:
+        inferred_parish = study.get("parish") or _infer_parish_from_query(study.get("location_text",""), study.get("municipality",""))
+        study["parish"] = st.text_input("Freguesia / localidade", value=inferred_parish, placeholder="Pode corrigir antes de pesquisar")
+    if not study.get("parish"):
+        st.caption("A freguesia será também procurada automaticamente a partir da rua/localização e das coordenadas.")
 
     candidates = _area_candidates(study.get("documents_analysis",{}))
     if study.get("estimated_area_m2"):
@@ -427,7 +505,7 @@ elif page.startswith("3"):
             if not _rules_valid(candidate_rules):
                 raise RuntimeError("A síntese recebida não contém uma matriz urbanística válida.")
             study["rules"] = candidate_rules
-            used = study["web_research"].get("model_used", "")
+            used = ", ".join(study["web_research"].get("models_used", []) or [])
             status.update(label=f"Pesquisa e matriz concluídas{f' · {used}' if used else ''}", state="complete", expanded=False)
             st.success("Pesquisa concluída. A matriz urbanística está pronta para revisão na Etapa 4.")
         except Exception as e:
@@ -459,67 +537,177 @@ elif page.startswith("3"):
             title = src.get("title") or src.get("url")
             st.markdown(f"- [{title}]({src.get('url')})")
     if _rules_valid(study.get("rules")):
-        st.success("✅ Matriz urbanística válida. Pode avançar para **4. Regras do jogo**.")
+        confirmed, numeric, total = _parameter_coverage(study.get("rules"))
+        if numeric == 0:
+            st.warning("A matriz foi estruturada, mas ainda não contém parâmetros urbanísticos quantitativos confirmados. Antes de calcular/cenarizar, repita/aprofunde a pesquisa ou confirme parâmetros na Etapa 4.")
+        else:
+            st.success(f"✅ Matriz urbanística pronta para revisão: {numeric}/{total} parâmetros com valor. Pode avançar para **4. Regras do jogo**.")
 
 elif page.startswith("4"):
     st.subheader("4. Regras do jogo e condicionantes")
     rules = study.get("rules") or {}
     if not rules:
-        st.info("Execute primeiro a pesquisa e a síntese da etapa 3.")
+        st.info("Execute primeiro a pesquisa territorial da Etapa 3.")
     else:
-        ready = rules.get("overall_readiness",{})
-        st.metric("Qualidade da base para análise", f"{ready.get('score',0)}/100", ready.get("label",""))
-        p = rules.get("planning",{})
-        st.markdown(f"**Instrumento:** {p.get('instrument','A confirmar')}  \n**Classificação:** {p.get('soil_class','')} / {p.get('category','')} / {p.get('subcategory','')}  \n**Estado:** `{p.get('status','a_confirmar')}`")
-        st.markdown("#### Usos")
-        if rules.get("uses"): st.dataframe(pd.DataFrame(rules["uses"]), use_container_width=True, hide_index=True)
-        st.markdown("#### Parâmetros")
+        confirmed, numeric, total = _parameter_coverage(rules)
+        p = rules.get("planning",{}) or {}
+        ident = rules.get("identification",{}) or {}
+        refs = (study.get("web_research",{}) or {}).get("citations",[]) or []
+
+        st.markdown("#### Identificação territorial")
+        c1,c2,c3 = st.columns(3)
+        c1.metric("Rua / local", ident.get("street_or_place") or study.get("location_text") or "A confirmar")
+        c2.metric("Município", ident.get("municipality") or study.get("municipality") or "A confirmar")
+        c3.metric("Freguesia / localidade", ident.get("parish") or study.get("parish") or "A confirmar")
+
+        st.markdown("#### Enquadramento")
+        instrument = p.get("instrument") or "A confirmar"
+        classification = " / ".join(x for x in [p.get("soil_class"), p.get("category"), p.get("subcategory")] if x) or "A confirmar"
+        st.write(f"**Instrumento:** {instrument} {_refs_text(p.get('sources'))}")
+        st.write(f"**Classificação:** {classification}")
+        st.write(f"**Estado:** {(p.get('status') or 'a_confirmar').replace('_',' ')}")
+        if p.get("basis"):
+            st.caption(str(p.get("basis")))
+
+        if numeric == 0:
+            st.error("A pesquisa não encontrou parâmetros quantitativos suficientes para um estudo de capacidade. Não serão apresentados cálculos ou cenários numéricos até existirem regras confirmadas.")
+        else:
+            st.success(f"Foram encontrados valores em {numeric}/{total} parâmetros urbanísticos principais.")
+
+        st.markdown("#### Usos admissíveis")
+        uses=[]
+        for u in rules.get("uses",[]) or []:
+            uses.append({
+                "Uso": u.get("use"),
+                "Admissibilidade": (u.get("admissibility") or "a confirmar").replace("_"," "),
+                "Fundamento": u.get("basis") or "",
+                "Ref.": _refs_text(u.get("sources")),
+            })
+        if uses:
+            st.dataframe(pd.DataFrame(uses), use_container_width=True, hide_index=True)
+        else:
+            st.info("Usos ainda não determinados.")
+
+        st.markdown("#### Parâmetros urbanísticos")
         rows=[]
-        for k,v in (rules.get("parameters",{}) or {}).items():
-            if isinstance(v,dict): rows.append({"Parâmetro":k,"Valor":v.get("value"),"Estado":v.get("status"),"Fundamento":v.get("basis")})
-        if rows: st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        for k in PARAM_LABELS:
+            v=(rules.get("parameters",{}) or {}).get(k) or {}
+            val=v.get("value")
+            unit=v.get("unit") or ""
+            display="A confirmar" if val in (None,"","None") else f"{val} {unit}".strip()
+            rows.append({
+                "Parâmetro":PARAM_LABELS[k], "Valor":display,
+                "Estado":(v.get("status") or "a_confirmar").replace("_"," "),
+                "Fundamento":v.get("basis") or "", "Ref.":_refs_text(v.get("sources"))
+            })
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+        with st.expander("✏️ Revisão técnica — confirmar/corrigir parâmetros", expanded=False):
+            st.caption("Use apenas quando o arquiteto dispõe de um valor confirmado em regulamento, parecer, PIP ou outra fonte técnica. As correções ficam marcadas como confirmação do utilizador.")
+            params = rules.setdefault("parameters", {})
+            fields = [
+                ("utilization_index","Índice de utilização / edificabilidade",0.0,10.0,0.01),
+                ("occupation_index","Índice de ocupação / implantação",0.0,100.0,0.01),
+                ("impermeability_index","Impermeabilização",0.0,100.0,0.01),
+                ("max_height_m","Altura / cércea máxima (m)",0.0,200.0,0.1),
+                ("max_floors_above_ground","Pisos máximos acima do solo",0.0,50.0,1.0),
+                ("max_floors_below_ground","Pisos máximos abaixo do solo",0.0,20.0,1.0),
+                ("front_setback_m","Afastamento frontal (m)",0.0,100.0,0.1),
+                ("side_setback_m","Afastamento lateral (m)",0.0,100.0,0.1),
+                ("rear_setback_m","Afastamento posterior (m)",0.0,100.0,0.1),
+            ]
+            edited={}
+            cols=st.columns(3)
+            for i,(key,label,mn,mx,step) in enumerate(fields):
+                current=(params.get(key) or {}).get("value")
+                value=float(current) if isinstance(current,(int,float)) else 0.0
+                with cols[i%3]:
+                    edited[key]=st.number_input(label,min_value=mn,max_value=mx,value=value,step=step,key=f"edit_{key}")
+            parking=st.text_input("Regra de estacionamento confirmada", value=str((params.get("parking_rule") or {}).get("value") or ""))
+            basis=st.text_input("Fonte / artigo da correção (recomendado)", placeholder="Ex.: RPDM, art. 72.º, n.º 3")
+            if st.button("Guardar confirmações técnicas"):
+                for key,val in edited.items():
+                    if val>0:
+                        item=params.setdefault(key,{})
+                        item.update({"value":val,"status":"confirmado_utilizador","basis":basis or item.get("basis","")})
+                if parking.strip():
+                    item=params.setdefault("parking_rule",{})
+                    item.update({"value":parking.strip(),"status":"confirmado_utilizador","basis":basis or item.get("basis","")})
+                ci=rules.setdefault("calculation_inputs",{})
+                for src,dst in [("utilization_index","utilization_index"),("occupation_index","occupation_index"),("impermeability_index","impermeability_index"),("max_height_m","max_height_m"),("max_floors_above_ground","max_floors")]:
+                    val=(params.get(src) or {}).get("value")
+                    if val not in (None,""): ci[dst]=val
+                study["rules"]=rules
+                study["calculations"]={}
+                study["scenarios"]=[]
+                st.success("Parâmetros técnicos atualizados. Os cálculos seguintes usarão estes valores.")
+                st.rerun()
+
         st.markdown("#### Condicionantes")
-        if rules.get("constraints"): st.dataframe(pd.DataFrame(rules["constraints"]), use_container_width=True, hide_index=True)
+        cons=[]
+        for c in rules.get("constraints",[]) or []:
+            cons.append({"Condicionante":c.get("name"),"Estado":(c.get("status") or "a confirmar").replace("_"," "),"Impacto":c.get("impact") or "","Fundamento":c.get("basis") or "","Ref.":_refs_text(c.get("sources"))})
+        if cons:
+            st.dataframe(pd.DataFrame(cons), use_container_width=True, hide_index=True)
+        else:
+            st.info("Não existem condicionantes confirmadas na informação disponível.")
+
         if rules.get("conflicts"):
-            st.error("Foram identificados conflitos que devem ser resolvidos antes de confiar nos cenários.")
+            st.error("Existem conflitos que devem ser resolvidos antes de confiar em cenários quantitativos.")
             for conflict in rules.get("conflicts", []):
-                if isinstance(conflict, dict):
-                    st.write("• " + " · ".join(f"{k.replace('_',' ')}: {v}" for k,v in conflict.items() if v not in (None,"",[],{})))
-                else:
-                    st.write("• " + str(conflict))
+                st.write("• " + (" · ".join(f"{k.replace('_',' ')}: {v}" for k,v in conflict.items() if v not in (None,"",[],{})) if isinstance(conflict,dict) else str(conflict)))
         if rules.get("critical_questions"):
-            st.warning("Pontos a confirmar: " + " · ".join(map(str,rules["critical_questions"])))
+            st.warning("**Pontos a confirmar**\n\n" + "\n".join(f"- {x}" for x in rules.get("critical_questions",[])))
+
+        if refs:
+            st.markdown("#### Fontes oficiais")
+            for src in refs[:30]:
+                st.markdown(f"**[{src.get('ref')}]** [{src.get('title') or src.get('url')}]({src.get('url')})")
 
 elif page.startswith("5"):
     st.subheader("5. Cálculos de capacidade urbanística")
     rules = study.get("rules") or {}
     if not rules:
-        st.info("Valide primeiro as regras e condicionantes na etapa 4.")
+        st.info("Valide primeiro as regras e condicionantes na Etapa 4.")
     else:
-        area_doc = ((rules.get("identification") or {}).get("area_m2"))
-        area_map = study.get("estimated_area_m2")
-        st.write("Os cálculos são executados em Python a partir de parâmetros confirmados. A IA não inventa valores numéricos em falta.")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.metric("Área do levantamento/documento", f"{area_doc:,.1f} m²" if isinstance(area_doc,(int,float)) else "A confirmar")
-        with c2:
-            st.metric("Área cartográfica aproximada", f"{area_map:,.1f} m²" if isinstance(area_map,(int,float)) else "A confirmar")
-        area_default = float(study.get("confirmed_area_m2") or 0.0)
-        confirmed_area = st.number_input("Área confirmada para cálculos (m²)", min_value=0.0, value=area_default, step=1.0, disabled=True, help="A área é escolhida/editada e confirmada na Etapa 3.")
-        if confirmed_area <= 0:
-            st.warning("Confirme primeiro a área do terreno na Etapa 3. A pesquisa territorial pode existir sem área, mas os cálculos não.")
-        if st.button("🧮 Executar cálculos determinísticos", type="primary", disabled=confirmed_area <= 0):
+        confirmed_area=float(study.get("confirmed_area_m2") or 0.0)
+        st.write("Os cálculos são executados pelo motor matemático da aplicação. A IA apenas fornece parâmetros quando estes têm suporte regulamentar/documental.")
+        c1,c2 = st.columns(2)
+        c1.metric("Área confirmada", f"{confirmed_area:,.1f} m²" if confirmed_area else "A confirmar")
+        numeric_inputs=_calc_inputs(rules)
+        available={k:v for k,v in numeric_inputs.items() if v not in (None,"","None")}
+        c2.metric("Parâmetros de cálculo disponíveis", f"{len(available)}/{len(numeric_inputs)}")
+
+        if confirmed_area<=0:
+            st.warning("Confirme a área do terreno na Etapa 3.")
+        if not available:
+            st.error("Ainda não existem parâmetros regulamentares quantitativos para calcular capacidade. Volte à Etapa 3 para aprofundar a pesquisa ou confirme/corrija parâmetros na Etapa 4 com base numa fonte técnica.")
+
+        if available:
+            inrows=[]
+            labels={"utilization_index":"Índice de utilização","occupation_index":"Índice de ocupação","impermeability_index":"Impermeabilização","max_height_m":"Altura máxima","max_floors":"Pisos máximos"}
+            for k,v in available.items(): inrows.append({"Entrada de cálculo":labels.get(k,k),"Valor":v})
+            st.dataframe(pd.DataFrame(inrows), use_container_width=True, hide_index=True)
+
+        if st.button("🧮 Executar cálculos determinísticos", type="primary", disabled=(confirmed_area<=0 or not available)):
             study["calculations"] = calculate_capacity(rules, confirmed_area)
-            st.success("Cálculos executados em Python.")
-        if study.get("calculations"):
-            derived=(study["calculations"] or {}).get("derived",{})
-            if derived:
-                cols=st.columns(min(4,max(1,len(derived))))
-                for i,(k,v) in enumerate(derived.items()):
-                    with cols[i % len(cols)]:
-                        st.metric(k.replace("_"," ").title(), v)
-            with st.expander("Ver cálculo técnico completo"):
-                st.json(study["calculations"])
+            st.success("Cálculos concluídos.")
+
+        calc=study.get("calculations") or {}
+        derived=calc.get("derived",{}) or {}
+        if derived:
+            labels={
+                "max_above_ground_gfa_by_utilization_m2":"ABC máxima pelo índice de utilização",
+                "max_footprint_by_occupation_m2":"Área máxima de implantação",
+                "max_impermeable_area_m2":"Área máxima impermeabilizada",
+                "simple_volume_ceiling_m2":"Teto geométrico simples por pisos",
+            }
+            rows=[{"Indicador":labels.get(k,k.replace('_',' ')),"Resultado":f"{v:,.1f} m²" if isinstance(v,(int,float)) else v} for k,v in derived.items()]
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            for note in calc.get("notes",[]) or []:
+                st.caption(note)
+        elif calc:
+            st.warning("Não foi possível obter resultados derivados com os parâmetros atualmente confirmados.")
 
 elif page.startswith("6"):
     st.subheader("6. Objetivo do cliente e cenários")
@@ -528,41 +716,48 @@ elif page.startswith("6"):
         "Habitação unifamiliar", "Habitação bifamiliar", "Moradias em banda", "Comércio", "Serviços", "Uso misto habitação + comércio/serviços", "Turismo", "Outro"
     ], index=0)
     study["priority"] = st.selectbox("Prioridade", ["Equilíbrio entre aproveitamento e risco","Máxima área construída","Maior número de frações","Menor risco urbanístico","Maior qualidade de espaços exteriores"])
-    if not study.get("calculations"):
-        st.info("Execute primeiro a Etapa 5. Os cenários só usam cálculos baseados numa área confirmada.")
-    if st.button("🏗️ Gerar 3 cenários preliminares", type="primary", disabled=not bool(study.get("rules") and study.get("calculations"))):
+
+    calc=study.get("calculations") or {}
+    derived=calc.get("derived",{}) or {}
+    if not derived:
+        st.error("Ainda não existe base quantitativa suficiente para gerar cenários úteis. Complete a Etapa 5. A aplicação não irá apresentar cartões com valores vazios ou 'None'.")
+    if st.button("🏗️ Gerar 3 cenários preliminares", type="primary", disabled=not bool(study.get("rules") and derived)):
         with st.spinner("A estruturar alternativas de aproveitamento..."):
             try:
                 svc = GeminiService()
                 study["scenarios"] = svc.generate_scenarios(study["objective"], study["priority"], study["rules"], study["calculations"])
             except Exception as e:
-                st.error(f"Erro: {e}")
+                st.error(f"Não foi possível gerar cenários agora: {e}")
+
     if study.get("scenarios"):
         cols = st.columns(3)
         for col,s in zip(cols, study["scenarios"][:3]):
             with col:
-                st.markdown(f"### {s.get('code')} · {s.get('name')}")
-                st.metric("ABC acima do solo", f"{s.get('above_ground_gfa_m2','-')} m²")
-                st.metric("Implantação", f"{s.get('implantation_m2','-')} m²")
-                st.write(f"**Pisos:** {s.get('floors_above_ground','-')}  ")
-                st.write(f"**Fogos indicativos:** {s.get('indicative_units','-')}  ")
-                st.write(f"**Risco:** {s.get('risk','-')}")
+                st.markdown(f"### {s.get('code','')} · {s.get('name','')}")
+                def val(v, suffix=""):
+                    return "A confirmar" if v in (None,"","None") else f"{v}{suffix}"
+                if s.get("above_ground_gfa_m2") is not None: st.metric("ABC acima do solo", val(s.get("above_ground_gfa_m2")," m²"))
+                if s.get("implantation_m2") is not None: st.metric("Implantação", val(s.get("implantation_m2")," m²"))
+                if s.get("floors_above_ground") is not None: st.write(f"**Pisos:** {val(s.get('floors_above_ground'))}")
+                if s.get("indicative_units") is not None: st.write(f"**Fogos indicativos:** {val(s.get('indicative_units'))}")
+                st.write(f"**Risco:** {s.get('risk','condicionado')}")
                 st.write(s.get("concept", ""))
+                if s.get("references"): st.caption("Referências: " + _refs_text(s.get("references")))
+                if s.get("missing_inputs"): st.info("Falta confirmar: " + " · ".join(map(str,s.get("missing_inputs"))))
                 if s.get("warnings"): st.warning(" · ".join(s["warnings"]))
 
 elif page.startswith("7"):
     st.subheader("7. Relatório e exportação")
     if not (study.get("rules") and study.get("scenarios")):
-        st.info("Complete pelo menos as regras e os cenários.")
+        st.info("Complete pelo menos as regras, os cálculos e os cenários.")
     else:
         st.success("Estudo pronto para apresentação preliminar.")
-        export = dict(study)
-        pdf = build_pdf(export)
+        pdf = build_pdf(dict(study))
         st.download_button("📄 Descarregar relatório PDF", data=pdf, file_name=f"{study.get('study_ref','ESTUDO')}_viabilidade.pdf", mime="application/pdf", use_container_width=True)
-        st.download_button("🧾 Descarregar JSON técnico", data=json.dumps(export, ensure_ascii=False, indent=2), file_name=f"{study.get('study_ref','ESTUDO')}_dados.json", mime="application/json", use_container_width=True)
+        st.caption("O relatório final contém as fontes numeradas [1], [2], … e não inclui JSON técnico.")
         st.markdown("#### Fontes")
         for src in (study.get("web_research",{}) or {}).get("citations",[]):
-            st.markdown(f"- [{src.get('title') or src.get('url')}]({src.get('url')})")
+            st.markdown(f"**[{src.get('ref')}]** [{src.get('title') or src.get('url')}]({src.get('url')})")
 
 with st.sidebar:
     st.divider()
