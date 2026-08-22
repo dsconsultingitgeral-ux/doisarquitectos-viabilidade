@@ -7,7 +7,10 @@ from src.prompt_loader import build_prompt
 from src.gemini_engine import run_full_analysis
 from src.report import build_pdf
 from src.ui import inject_css, header, steps, metric_card, extract_highlight, source_cards, brand_logo
-from src.location import geocode_location, inferred_fields
+from src.location import geocode_location, reverse_geocode, inferred_fields
+import folium
+from folium.plugins import Fullscreen
+from streamlit_folium import st_folium
 
 st.set_page_config(
     page_title="doisarquitetos · Pré-Viabilidade",
@@ -23,7 +26,7 @@ if not login_required():
     st.stop()
 
 with st.sidebar:
-    brand_logo(compact=True)
+    brand_logo(sidebar=True)
     st.markdown("### doisarquitetos")
     st.caption("Pré-Viabilidade Urbanística · V4.2 Plus")
     st.divider()
@@ -41,97 +44,194 @@ steps(step)
 # 01 — LOCALIZAÇÃO
 # ------------------------------------------------------------
 if step == 1:
-    header("Validar localização", "Localização clara, mapa imediato e confirmação antes do estudo técnico.")
+    header(
+        "Localizar o terreno",
+        "Pesquise pela morada ou clique diretamente no mapa. A localização é o ponto de partida; a análise técnica confirma depois o que é realmente aplicável à parcela."
+    )
 
     st.markdown("""
     <div class="da-hero">
-      <div class="big">Começa apenas pela localização.</div>
-      <div class="small">Mesmo sem documentos, a V4.2 Plus pode produzir um estudo preliminar da zona através de fontes oficiais. Os documentos aumentam a precisão e permitem confirmar a parcela.</div>
+      <div class="big">Onde fica o terreno?</div>
+      <div class="small">
+        Pode começar apenas com uma rua, morada, localidade ou coordenadas.
+        Se não tiver documentos, a aplicação continua e produz uma pré-análise com base nas fontes oficiais disponíveis.
+      </div>
     </div>
     """, unsafe_allow_html=True)
 
-    c_addr, c_btn = st.columns([4, 1])
-    with c_addr:
-        st.session_state.location = st.text_input(
-            "Morada / localização do terreno *",
+    # --- Search strip
+    search_col, action_col = st.columns([5, 1.35], gap="small")
+    with search_col:
+        query = st.text_input(
+            "Pesquisar localização",
             value=st.session_state.location,
-            placeholder="Ex.: Alameda Silva Rocha, Aveiro"
+            placeholder="Ex.: Alameda Silva Rocha, Aveiro",
+            key="location_search_v43"
         )
-    with c_btn:
+    with action_col:
         st.write("")
         st.write("")
-        locate = st.button("📍 Localizar", use_container_width=True)
+        locate = st.button("Localizar", type="primary", use_container_width=True)
 
-    if locate and st.session_state.location.strip():
-        try:
-            with st.spinner("A localizar…"):
-                geo = geocode_location(st.session_state.location)
-            if geo:
-                st.session_state.geo_lat = geo.lat
-                st.session_state.geo_lon = geo.lon
-                st.session_state.geo_display_name = geo.display_name
-                st.session_state.geo_source_url = geo.source_url
-                inf = inferred_fields(geo)
-                if not st.session_state.municipality:
+    if locate:
+        if not query.strip():
+            st.warning("Escreva uma morada, rua, localidade ou coordenadas.")
+        else:
+            try:
+                with st.spinner("A localizar…"):
+                    geo = geocode_location(query)
+                if geo:
+                    st.session_state.location = query.strip()
+                    st.session_state.geo_lat = geo.lat
+                    st.session_state.geo_lon = geo.lon
+                    st.session_state.geo_display_name = geo.display_name
+                    st.session_state.geo_source_url = geo.source_url
+
+                    inf = inferred_fields(geo)
                     st.session_state.municipality = inf["municipality"]
-                if not st.session_state.parish:
                     st.session_state.parish = inf["parish"]
-                if not st.session_state.locality:
                     st.session_state.locality = inf["locality"]
-                st.success("Localização aproximada encontrada. Confirma visualmente o ponto no mapa.")
-            else:
-                st.warning("Não encontrei um ponto inequívoco. Podes completar manualmente a localização e continuar.")
-        except Exception as exc:
-            st.warning("Não foi possível geocodificar agora. A análise pode continuar com a morada escrita.")
-            st.caption(str(exc))
+                    st.session_state["municipality_v43"] = inf["municipality"]
+                    st.session_state["parish_v43"] = inf["parish"]
+                    st.session_state["locality_v43"] = inf["locality"]
+                    st.session_state["location_search_v43"] = query.strip()
+                    st.session_state["last_map_click"] = None
+                    st.rerun()
+                else:
+                    st.warning("Não encontrei uma localização inequívoca. Pode clicar diretamente no mapa.")
+            except Exception as exc:
+                st.warning("Não foi possível concluir a pesquisa de localização.")
+                st.caption(str(exc))
+
+    # --- Map: ALWAYS visible, even before searching.
+    lat = st.session_state.geo_lat if st.session_state.geo_lat is not None else 40.2056
+    lon = st.session_state.geo_lon if st.session_state.geo_lon is not None else -8.4196
+    zoom = 17 if st.session_state.geo_lat is not None else 7
+
+    st.markdown("### Mapa")
+    st.caption("Pesquise acima ou clique diretamente no local do terreno. O clique tenta identificar automaticamente a rua e a localização.")
+
+    fmap = folium.Map(
+        location=[lat, lon],
+        zoom_start=zoom,
+        control_scale=True,
+        tiles="OpenStreetMap",
+    )
+    Fullscreen(position="topright", title="Ecrã inteiro", title_cancel="Sair").add_to(fmap)
 
     if st.session_state.geo_lat is not None and st.session_state.geo_lon is not None:
-        st.markdown("### Mapa de localização")
-        st.map(
-            [{"lat": st.session_state.geo_lat, "lon": st.session_state.geo_lon}],
-            latitude="lat",
-            longitude="lon",
-            zoom=16,
-            use_container_width=True,
-        )
+        folium.Marker(
+            [st.session_state.geo_lat, st.session_state.geo_lon],
+            tooltip="Localização selecionada",
+            icon=folium.Icon(color="darkblue", icon="map-marker")
+        ).add_to(fmap)
+
+    map_data = st_folium(
+        fmap,
+        width=None,
+        height=430,
+        returned_objects=["last_clicked"],
+        use_container_width=True,
+        key="terrain_map_v43",
+    )
+
+    clicked = (map_data or {}).get("last_clicked")
+    if clicked:
+        click_key = f'{clicked.get("lat", 0):.6f},{clicked.get("lng", 0):.6f}'
+        if click_key != st.session_state.get("last_map_click"):
+            st.session_state["last_map_click"] = click_key
+            try:
+                with st.spinner("A identificar o local selecionado…"):
+                    geo = reverse_geocode(float(clicked["lat"]), float(clicked["lng"]))
+                if geo:
+                    inf = inferred_fields(geo)
+                    st.session_state.geo_lat = geo.lat
+                    st.session_state.geo_lon = geo.lon
+                    st.session_state.geo_display_name = geo.display_name
+                    st.session_state.geo_source_url = geo.source_url
+                    st.session_state.location = inf["concise"]
+                    st.session_state.municipality = inf["municipality"]
+                    st.session_state.parish = inf["parish"]
+                    st.session_state.locality = inf["locality"]
+                    st.session_state["location_search_v43"] = inf["concise"]
+                    st.session_state["municipality_v43"] = inf["municipality"]
+                    st.session_state["parish_v43"] = inf["parish"]
+                    st.session_state["locality_v43"] = inf["locality"]
+                    st.rerun()
+            except Exception as exc:
+                st.warning("O ponto ficou marcado, mas não foi possível obter automaticamente a morada.")
+                st.caption(str(exc))
+
+    if st.session_state.geo_lat is not None and st.session_state.geo_lon is not None:
         st.markdown(
-            f'<div class="map-note"><b>Ponto aproximado:</b> {st.session_state.geo_display_name}<br>'
-            'Este mapa serve para validar a localização. Não representa os limites cadastrais nem permite inferir a área do terreno.</div>',
+            f"""
+            <div class="da-card" style="margin-top:10px">
+              <div class="da-card-label">LOCALIZAÇÃO SELECIONADA</div>
+              <div class="da-card-value" style="font-size:18px">{st.session_state.geo_display_name or st.session_state.location}</div>
+              <div class="da-card-note">
+                Coordenadas: {st.session_state.geo_lat:.6f}, {st.session_state.geo_lon:.6f}
+              </div>
+            </div>
+            """,
             unsafe_allow_html=True
         )
 
+    # --- Details: clean, secondary to the map
     st.write("")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.session_state.municipality = st.text_input("Município", value=st.session_state.municipality)
-    with c2:
-        st.session_state.parish = st.text_input("Freguesia", value=st.session_state.parish)
-    with c3:
-        st.session_state.locality = st.text_input("Localidade", value=st.session_state.locality)
+    st.markdown("### Dados do terreno")
+    d1, d2, d3 = st.columns(3, gap="small")
+    with d1:
+        st.session_state.municipality = st.text_input(
+            "Município",
+            value=st.session_state.municipality,
+            key="municipality_v43"
+        )
+    with d2:
+        st.session_state.parish = st.text_input(
+            "Freguesia",
+            value=st.session_state.parish,
+            key="parish_v43"
+        )
+    with d3:
+        st.session_state.locality = st.text_input(
+            "Localidade",
+            value=st.session_state.locality,
+            key="locality_v43"
+        )
 
-    c4, c5 = st.columns(2)
-    with c4:
-        st.session_state.article = st.text_input("Artigo matricial, se conhecido", value=st.session_state.article)
-    with c5:
-        st.session_state.known_area = st.text_input("Área conhecida, se disponível", value=st.session_state.known_area, placeholder="Ex.: 2.974 m²")
+    d4, d5 = st.columns(2, gap="small")
+    with d4:
+        st.session_state.article = st.text_input(
+            "Artigo matricial, se conhecido",
+            value=st.session_state.article,
+            key="article_v43"
+        )
+    with d5:
+        st.session_state.known_area = st.text_input(
+            "Área conhecida, se disponível",
+            value=st.session_state.known_area,
+            placeholder="Ex.: 2.974 m²",
+            key="known_area_v43"
+        )
 
     st.markdown("""
-    <div class="da-status-warn">
-    <b>Regra de segurança:</b> a morada e o ponto do mapa são apenas uma referência de localização.
-    A área, limites do prédio, artigo matricial e incidência exata de condicionantes só são considerados confirmados quando sustentados por documentos, cadastro, polígono conhecido ou fonte oficial aplicável.
+    <div class="da-status-warn" style="margin-top:8px">
+      <b>Nota técnica.</b> O ponto do mapa confirma a localização aproximada, não os limites cadastrais.
+      Área, geometria da parcela e incidências exatas só são dadas como confirmadas quando suportadas por documento, cadastro, polígono ou fonte oficial.
     </div>
     """, unsafe_allow_html=True)
 
     st.session_state.location_confirmed = st.checkbox(
-        "Confirmo que o ponto/morada correspondem ao local que pretendo estudar.",
-        value=st.session_state.location_confirmed
+        "Confirmo que esta é a localização do terreno que pretendo analisar.",
+        value=st.session_state.location_confirmed,
+        key="location_confirmed_v43"
     )
 
-    if st.button("Confirmar localização e continuar →", type="primary", use_container_width=True):
-        if not st.session_state.location.strip():
-            st.error("Indica pelo menos uma morada ou localização.")
+    if st.button("Continuar para documentos →", type="primary", use_container_width=True):
+        if not st.session_state.location.strip() and st.session_state.geo_lat is None:
+            st.error("Selecione primeiro a localização do terreno.")
         elif not st.session_state.location_confirmed:
-            st.error("Confirma a localização antes de continuar.")
+            st.error("Confirme a localização antes de continuar.")
         else:
             go(2)
 

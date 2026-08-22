@@ -1,4 +1,4 @@
-# doisarquitetos — Pré‑Viabilidade Urbanística V4.2 Plus · Gemini
+# doisarquitetos — Pré‑Viabilidade Urbanística V4.2 Plus Studio · Gemini
 
 Aplicação Streamlit para **estudo preliminar de viabilidade urbanística de terrenos em Portugal**.
 
@@ -117,3 +117,19 @@ Secrets privados utilizados:
 ## Nota
 
 O resultado é um **estudo preliminar de apoio à decisão**. A aplicação deve distinguir sempre informação confirmada, provável, não determinada e em conflito, conforme definido no Master Prompt.
+
+
+## Revisão visual Studio
+
+Esta revisão corrige especificamente a experiência gráfica:
+
+- logo real mostrado sem ampliação artificial, para evitar desfocagem;
+- cabeçalho limpo, sem duplicação/corte do logótipo;
+- espaçamento superior corrigido para não cortar a navegação;
+- largura e tipografia ajustadas a um gabinete de arquitetura;
+- mapa sempre visível no Módulo 01;
+- pesquisa por morada;
+- **clique direto no mapa com reverse geocoding** para tentar preencher rua/localização;
+- coordenadas apresentadas após seleção;
+- Município, Freguesia e Localidade preenchidos automaticamente quando a geocodificação os disponibiliza;
+- mantém integralmente Documentos, Master Prompt, Gemini, fontes, potencial, cenários e PDF.
