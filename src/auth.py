@@ -25,9 +25,20 @@ def login_required() -> bool:
     """, unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    with st.form("login_form"):
-        user = st.text_input("Utilizador")
-        password = st.text_input("Password", type="password")
+    with st.form("login_form", clear_on_submit=False):
+        user = st.text_input(
+            "Identificação de acesso",
+            value="",
+            key="access_identifier_v42plus",
+            placeholder=""
+        )
+        password = st.text_input(
+            "Chave de acesso",
+            value="",
+            type="password",
+            key="access_secret_v42plus",
+            placeholder=""
+        )
         submitted = st.form_submit_button("Entrar", use_container_width=True)
 
     if submitted:

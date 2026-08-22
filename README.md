@@ -1,145 +1,119 @@
-# doisarquitetos — Pré‑Viabilidade Urbanística V4.2 Plus.2 Plus
+# doisarquitetos — Pré‑Viabilidade Urbanística V4.2 Plus · Gemini
 
+Aplicação Streamlit para **estudo preliminar de viabilidade urbanística de terrenos em Portugal**.
 
-## Novidades da revisão V4.1
+## Fluxo
 
-- **Logo no topo e na barra lateral.** Se existir `assets/logo.png`, `logo.webp` ou `logo.jpg`, a aplicação usa esse ficheiro automaticamente; caso contrário usa o `logo.svg` incluído.
-- **Mapa no Módulo 01** com geocodificação inicial da morada para validação visual.
-- **Modo sem documentos:** o utilizador pode avançar apenas com a localização. A IA produz um estudo preliminar baseado em pesquisa oficial, sem inventar área, limites ou artigo.
-- A geocodificação é apenas auxiliar e nunca é usada para inferir a geometria ou área da parcela.
-- Mantém integralmente toda a lógica da V4: Master Prompt, fontes `[1]`, `[2]`, `[3]`, links efetivamente consultados, cenários e relatório PDF.
+**01 Localização → 02 Documentos → 03 Análise IA → 04 Potencial / Relatório**
 
-### Colocar o logo real
+### 01 — Localização
 
-Basta substituir/adicionar um destes ficheiros:
+- morada;
+- mapa;
+- coordenadas auxiliares;
+- município/freguesia/localidade;
+- artigo e área, quando conhecidos;
+- validação visual do local.
+
+A geocodificação é apenas uma ajuda de localização. **Nunca é utilizada para inventar a área ou os limites do prédio.**
+
+### 02 — Documentos
+
+Pode trabalhar:
+
+- **Modo rápido:** apenas localização;
+- **Modo completo:** localização + documentos.
+
+Documentos podem incluir levantamento topográfico, plantas municipais, certidões, PIP, cadastro e outros elementos da parcela.
+
+### 03 — Análise IA
+
+Motor: **Gemini API + Pesquisa Google**.
+
+A aplicação envia ao Gemini:
+
+- o **Master Prompt integral aprovado**;
+- os documentos anexados;
+- o contexto da localização;
+- regras adicionais obrigatórias de fontes e rastreabilidade.
+
+O ficheiro `prompts/master_prompt.txt` mantém o prompt técnico integral.
+
+### 04 — Potencial
+
+Apresenta primeiro a decisão:
+
+- viabilidade;
+- área considerada;
+- classificação;
+- categoria;
+- uso recomendado;
+- implantação;
+- construção;
+- pisos;
+- fogos indicativos;
+- condicionantes;
+- confiança.
+
+Depois:
+
+- Cenário A — Conservador;
+- Cenário B — Equilibrado;
+- Cenário C — Máximo potencial;
+- recomendação;
+- fundamentação técnica;
+- fontes;
+- links;
+- relatório PDF.
+
+## Fontes
+
+O Master Prompt exige referências do tipo:
+
+`[1]`, `[2]`, `[3]`...
+
+No final do estudo deve existir uma secção de referências e documentos analisados.
+
+Além disso, a interface recolhe os **links devolvidos pelo grounding da Pesquisa Google do Gemini** quando disponíveis.
+
+## Segurança
+
+Não existem credenciais por defeito no código.
+
+Não coloque credenciais no GitHub.
+
+Leia primeiro:
+
+- `DEPLOY_SEGURO.md`
+- `TESTE_HOJE.md`
+
+## Logo
+
+O projeto já inclui `assets/logo.png`, obtido do visual aprovado no teste.
+
+Se quiser substituir pelo ficheiro original de alta resolução, basta trocar:
 
 ```text
 assets/logo.png
-assets/logo.webp
-assets/logo.jpg
 ```
 
-O código dá prioridade ao PNG, depois WEBP/JPG, e usa o SVG de fallback.
+A aplicação também aceita WEBP/JPG/SVG.
 
+## API
 
-Aplicação Streamlit com 4 módulos:
-
-1. **Localização** — identificação inicial e confirmação do terreno.
-2. **Documentos** — upload e checklist documental.
-3. **Análise IA** — execução integral do Master Prompt aprovado, análise de ficheiros e pesquisa web.
-4. **Potencial** — resultado executivo, análise técnica, fontes/links e relatório PDF.
-
-## O que está preservado
-
-O ficheiro `prompts/master_prompt.txt` contém **integralmente e sem redução** o prompt aprovado no teste da Alameda Silva Rocha.
-
-A V4 acrescenta um ficheiro separado, `prompts/source_addendum.txt`, exclusivamente para tornar obrigatória a metodologia de referências `[1]`, `[2]`, `[3]`, a lista de documentos analisados e a lista de **links efetivamente acedidos** durante a pesquisa.
-
-## Publicar sem instalar Python
-
-### 1. Criar um repositório no GitHub
-
-Crie um repositório, por exemplo:
-
-`doisarquitetos-viabilidade-v4`
-
-Extraia o ZIP e envie **todo o conteúdo da pasta** para a raiz do repositório.
-
-O GitHub deve ficar aproximadamente assim:
+SDK:
 
 ```text
-app.py
-requirements.txt
-README.md
-assets/
-prompts/
-src/
-.streamlit/
+google-genai
 ```
 
-Não envie um ficheiro `.streamlit/secrets.toml` real para o GitHub.
+Secrets privados utilizados:
 
-### 2. Criar a aplicação no Streamlit Community Cloud
+- `GEMINI_API_KEY`
+- `GEMINI_MODEL`
+- `[auth].username`
+- `[auth].password`
 
-Entre no Streamlit Community Cloud, escolha **New app**, selecione o repositório e indique:
+## Nota
 
-```text
-Main file path: app.py
-```
-
-### 3. Adicionar os Secrets
-
-Nas definições da aplicação, abra **Secrets** e cole:
-
-```toml
-OPENAI_API_KEY = ""
-OPENAI_MODEL = ""
-
-[auth]
-username = ""
-password = ""
-```
-
-Pode alterar utilizador e password.
-
-### 4. Deploy
-
-Carregue em **Deploy**.
-
-O Streamlit instala automaticamente o `requirements.txt`. Não é necessário instalar Python no computador.
-
-## Como funciona a análise
-
-O motor usa a **Responses API** da OpenAI com:
-
-- ficheiros enviados como `input_file`;
-- `web_search` para pesquisa externa;
-- Master Prompt completo;
-- addendum obrigatório de fontes;
-- extração das citações URL estruturadas devolvidas pela API;
-- geração de PDF com as fontes efetivamente acedidas.
-
-A documentação atual da OpenAI usa a Responses API para pedidos com modelos e ferramentas. Consulte sempre a documentação oficial antes de alterar versões ou parâmetros da API.
-
-## Segurança / produção
-
-O login incluído é deliberadamente simples, adequado a protótipo privado. Para produção com vários clientes, deverá ser substituído por autenticação real (por exemplo Auth0, Supabase Auth ou SSO).
-
-O Streamlit Community Cloud não deve ser usado como armazenamento permanente de estudos. Nesta V4 os resultados vivem na sessão e podem ser descarregados em PDF/Markdown.
-
-## Ficheiros importantes
-
-### `prompts/master_prompt.txt`
-Prompt aprovado, mantido integralmente.
-
-### `prompts/source_addendum.txt`
-Força:
-
-- referências `[1]`, `[2]`, `[3]` junto das conclusões;
-- fontes oficiais prioritárias;
-- links realmente consultados;
-- documentos fornecidos;
-- páginas/artigos;
-- indicação `FONTE NÃO CONFIRMADA` quando necessário.
-
-### `src/openai_engine.py`
-Upload dos documentos, pesquisa web e execução do modelo.
-
-### `src/report.py`
-Geração do relatório PDF.
-
-## Modelo
-
-Por defeito:
-
-```toml
-OPENAI_MODEL = ""
-```
-
-Pode trocar por outro modelo compatível com o fluxo, alterando apenas o Secret.
-
-## Nota técnica importante
-
-Os cartões do Módulo 4 fazem uma extração "best effort" dos títulos e valores do texto final. **O relatório técnico completo é sempre a fonte autoritativa dentro da aplicação.**
-
-Para uma próxima versão, o ideal é manter o relatório narrativo perfeito e, em paralelo, pedir ao modelo uma pequena saída estruturada apenas para alimentar os cartões da interface. Assim os números ficam 100% estáveis sem alterar o Master Prompt.
+O resultado é um **estudo preliminar de apoio à decisão**. A aplicação deve distinguir sempre informação confirmada, provável, não determinada e em conflito, conforme definido no Master Prompt.

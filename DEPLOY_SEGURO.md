@@ -1,28 +1,47 @@
-# Publicação segura — V4.2 Plus
+# PUBLICAÇÃO SEGURA — V4.2 PLUS GEMINI
 
-Nunca coloque credenciais, palavras-passe ou chaves de API no GitHub.
+## Regra principal
 
-No Streamlit Community Cloud, configure os valores apenas em **Settings > Secrets**.
+**Nunca colocar utilizador, palavra-passe ou API Key no GitHub.**
 
-Estrutura:
+As credenciais ficam exclusivamente em:
+
+**Streamlit Community Cloud → Manage app → Settings → Secrets**
+
+## Secrets necessários
+
+No painel privado do Streamlit, crie estas chaves:
 
 ```toml
-OPENAI_API_KEY = ""
-OPENAI_MODEL = ""
+GEMINI_API_KEY = "<CONFIGURAR_PRIVADAMENTE>"
+GEMINI_MODEL = "gemini-3.7-flash"
 
 [auth]
-username = ""
-password = ""
+username = "<CONFIGURAR_PRIVADAMENTE>"
+password = "<CONFIGURAR_PRIVADAMENTE>"
 ```
 
-Preencha os valores apenas no painel privado do Streamlit Cloud.
+Os valores reais não devem existir em nenhum ficheiro do repositório.
 
-O repositório público não deve conter:
+## O GitHub público NÃO deve conter
+
 - utilizador real;
 - palavra-passe real;
-- chave de API real;
-- ficheiro `.env`;
-- ficheiro `.streamlit/secrets.toml`;
-- screenshots com credenciais.
+- Gemini API Key;
+- `.streamlit/secrets.toml`;
+- `.env` com valores;
+- screenshots onde as credenciais estejam visíveis.
 
-A aplicação falha de forma segura se o utilizador ou a palavra-passe não estiverem configurados.
+## Login
+
+A aplicação não possui utilizador ou palavra-passe por defeito.
+
+Se os Secrets não estiverem configurados, o acesso é bloqueado e aparece uma mensagem de configuração.
+
+## Gemini
+
+A aplicação usa o SDK oficial `google-genai`.
+
+A chave é lida apenas de `GEMINI_API_KEY` nos Secrets privados.
+
+O modelo pode ser alterado com `GEMINI_MODEL`, também sem alterar o código público.

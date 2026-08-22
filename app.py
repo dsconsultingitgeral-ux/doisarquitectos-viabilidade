@@ -4,7 +4,7 @@ import streamlit as st
 from src.auth import login_required, logout_button
 from src.state import init_state, go
 from src.prompt_loader import build_prompt
-from src.openai_engine import run_full_analysis
+from src.gemini_engine import run_full_analysis
 from src.report import build_pdf
 from src.ui import inject_css, header, steps, metric_card, extract_highlight, source_cards, brand_logo
 from src.location import geocode_location, inferred_fields
@@ -284,7 +284,7 @@ elif step == 3:
         except Exception as exc:
             status.update(label="Não foi possível concluir a análise.", state="error")
             st.exception(exc)
-            st.info("Verifica a OPENAI_API_KEY em Settings > Secrets do Streamlit Cloud.")
+            st.info("Verifica a GEMINI_API_KEY em Settings > Secrets do Streamlit Cloud.")
 
 # ------------------------------------------------------------
 # 04 — POTENCIAL / RELATÓRIO
@@ -354,7 +354,7 @@ elif step == 4:
 
     with tabs[2]:
         st.markdown("### Links efetivamente acedidos")
-        st.caption("Estes links são extraídos das anotações de citação URL devolvidas pela pesquisa web da API nesta execução.")
+        st.caption("Estes links são extraídos das anotações de citação URL devolvidas pela Pesquisa Google integrada no Gemini nesta execução.")
         source_cards(st.session_state.analysis_sources)
         st.divider()
         st.markdown("### Metodologia [1], [2], [3]")

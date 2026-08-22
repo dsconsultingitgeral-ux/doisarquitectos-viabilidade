@@ -1,6 +1,7 @@
 streamlit>=1.38
-openai>=1.55
+google-genai>=1.0.0
 reportlab>=4.2
 pypdf>=5.0
 python-dotenv>=1.0
 requests>=2.32
+Pillow>=10.0
