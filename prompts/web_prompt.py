@@ -1,37 +1,54 @@
 WEB_RESEARCH_PROMPT = r'''
-Faz investigação territorial e regulamentar ATUAL para um estudo preliminar em Portugal.
+Faz uma PESQUISA TERRITORIAL RÁPIDA E RASTREÁVEL para um estudo preliminar em Portugal.
 
 DADOS DO TERRENO:
 {study_context}
 
-DADOS EXTRAÍDOS DOS DOCUMENTOS:
+RESUMO DOS DOCUMENTOS JÁ ANALISADOS:
 {document_context}
 
-OBJETIVO:
-Localizar e confirmar, através de fontes oficiais, as regras do jogo aplicáveis ao local. Usa Google Search quando necessário e cita URLs.
+MISSÃO:
+Encontrar APENAS as fontes e regras que podem alterar a viabilidade deste terreno. Não escrevas código, pseudocódigo, fórmulas Python, SQL ou instruções de programação. Não faças cálculos de capacidade. Não produzas uma monografia.
 
-ORDEM DE INVESTIGAÇÃO:
-A. Identificar município/freguesia e instrumento(s) de gestão territorial em vigor.
-B. Procurar SIG/geoportal/plantas oficiais relevantes e páginas oficiais para consulta.
-C. Confirmar PDM em vigor, respetivo regulamento e publicação no Diário da República; verificar revisões, alterações, correções materiais, suspensões e datas.
-D. Verificar se existem PU, PP, loteamentos ou instrumentos especiais potencialmente aplicáveis ao local.
-E. A partir da classificação indicada pelos documentos ou SIG, localizar artigos que definam essa categoria/subcategoria.
-F. Extrair: usos dominantes/permitidos/compatíveis/complementares; índice de utilização; ocupação; impermeabilização; implantação; área de construção; altura/cércea; nº pisos; afastamentos; alinhamentos; densidade; estacionamento; cedências; espaços verdes e outras regras específicas.
-G. Investigar condicionantes relevantes: REN, RAN, recursos hídricos/domínio hídrico, risco/incêndio rural, ruído, património, rodovia, ferrovia, rede elétrica, infraestruturas/equipamentos, servidões e restrições de utilidade pública.
-H. Identificar legislação nacional complementar necessária (ex.: RJUE e regimes especiais), sem encher o relatório com legislação não relacionada com o caso.
+ORDEM DE PRIORIDADE:
+1. Confirmar município/freguesia e instrumento(s) territorial(is) aplicável(eis).
+2. Confirmar PDM/regulamento em vigor e respetivas alterações/correções/suspensões.
+3. Identificar a categoria/subcategoria do solo se houver suporte nos documentos ou nas fontes.
+4. Localizar os artigos que regem: usos, edificabilidade/índices, implantação, impermeabilização, altura/cércea/pisos, afastamentos, estacionamento e demais parâmetros relevantes.
+5. Verificar apenas as condicionantes plausíveis no caso: REN, RAN, água/domínio hídrico, incêndio, ruído, património, rodovia/ferrovia, rede elétrica, servidões, PU/PP/loteamento e outras efetivamente relevantes.
 
-HIERARQUIA DE FONTES:
-1 Diário da República / legislação oficial
-2 Município / SIG / regulamento municipal
-3 DGT/SNIT
-4 CCDR / APA / ICNF / Património Cultural / Infraestruturas de Portugal / outras entidades públicas competentes
-5 outras fontes apenas como pista
+FONTES PREFERENCIAIS:
+- Diário da República / legislação oficial
+- Município / SIG / geoportal / regulamento municipal
+- DGT/SNIT
+- CCDR, APA, ICNF, Património Cultural, Infraestruturas de Portugal e outras entidades públicas competentes
 
-REGRAS:
-- Não declares "não existe" se apenas não encontraste.
-- Se a classificação do terreno não estiver confirmada, devolve-a como A CONFIRMAR e indica exatamente o passo necessário.
-- Não apresentes parâmetro numérico sem base normativa rastreável.
-- Se houver conflito entre documento fornecido e fonte atual, assinala CONFLITO.
+REGRAS DE SEGURANÇA TÉCNICA:
+- Não inventes parâmetros numéricos.
+- Não declares ausência de uma condicionante apenas porque não a encontraste.
+- Se não conseguires confirmar algo, escreve A CONFIRMAR.
+- Se documento e fonte atual divergirem, escreve CONFLITO.
+- Distingue claramente FACTO OFICIAL, DOCUMENTO FORNECIDO e INTERPRETAÇÃO.
+- Cita URL e, quando disponível, artigo/n.º/alínea/página.
 
-DEVOLVE um texto técnico estruturado, incluindo no final uma secção "FONTES CONSULTADAS" com links e, sempre que possível, artigo/número/alínea/página.
+FORMATO DA RESPOSTA — texto curto e sem blocos de código:
+RESUMO EXECUTIVO
+- Município / freguesia
+- Instrumento territorial em vigor
+- Classificação do solo (ou A CONFIRMAR)
+- 3 a 8 conclusões principais
+
+REGRAS ENCONTRADAS
+- [tema] | [valor/regra] | [estado] | [fundamento/artigo] | [fonte]
+
+CONDICIONANTES
+- [condicionante] | [estado] | [impacto] | [fonte]
+
+PONTOS A CONFIRMAR
+- lista objetiva
+
+FONTES CONSULTADAS
+- título | URL
+
+Máximo recomendado: 1600 palavras.
 '''

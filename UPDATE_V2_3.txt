@@ -1,0 +1,17 @@
+V2.3 — Estabilização profissional
+
+Principais alterações:
+1. Cabeçalho totalmente refeito em HTML/CSS para eliminar corte das letras.
+2. Logo do login renderizado por HTML com object-fit contain, margens e altura segura.
+3. Etapa 3 agora faz Pesquisa + Síntese numa única ação do utilizador.
+4. Pesquisa territorial recebe prompt curto e explícito: sem código, sem Python e sem cálculos.
+5. Progresso visível em 4 fases.
+6. Se a pesquisa web falhar, a aplicação tenta criar matriz provisória a partir da documentação em vez de bloquear todo o estudo.
+7. Etapa 4 passa a ser exclusivamente revisão das regras/condicionantes.
+8. Etapa 5 fica exclusivamente para cálculos determinísticos em Python.
+9. Saída extensa da IA é truncada/limpa na interface; fontes ficam em lista própria.
+
+Secrets recomendados:
+GEMINI_MODEL = "gemini-3.6-flash"
+GEMINI_FALLBACK_MODELS = "gemini-3.5-flash,gemini-3.7-flash"
+GEMINI_TIMEOUT_MS = 45000

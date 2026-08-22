@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import base64
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
@@ -19,19 +20,27 @@ st.set_page_config(page_title="doisarquitectos | Viabilidade", page_icon=str(Pat
 
 CSS = """
 <style>
-:root { --ink:#1f2d33; --muted:#62727a; --accent:#91b7bf; --panel:#f5f8f9; }
-.block-container { padding-top: 1.5rem; max-width: 1500px; }
-.da-sub {color:var(--muted);margin-top:-8px;margin-bottom:18px;line-height:1.45;}
-[data-testid="stHeadingWithActionElements"] h1, [data-testid="stHeadingWithActionElements"] h2, [data-testid="stHeadingWithActionElements"] h3 {line-height:1.35 !important; padding-top:0.08rem !important; overflow:visible !important;}
-[data-testid="stImage"] img {object-fit:contain;}
-.brand-note{font-size:.82rem;color:var(--muted);margin-top:-8px;}
+:root { --ink:#20252b; --muted:#66737a; --accent:#91b7bf; --panel:#f5f8f9; }
+.block-container { padding-top: 1.15rem; max-width: 1500px; }
+[data-testid="stImage"] img { object-fit: contain !important; }
+.da-brand {display:flex;align-items:center;gap:28px;margin:6px 0 22px 0;overflow:visible!important;min-height:92px;}
+.da-brand-logo {flex:0 0 195px;display:flex;align-items:center;justify-content:flex-start;overflow:visible!important;}
+.da-brand-logo img {width:195px;height:auto;max-height:82px;object-fit:contain;display:block;overflow:visible!important;}
+.da-brand-copy {flex:1;min-width:0;overflow:visible!important;padding:8px 0 10px 0;}
+.da-brand-title {font-family:Arial,Helvetica,sans-serif;font-size:2.48rem;font-weight:800;line-height:1.24!important;color:var(--ink);margin:0!important;padding:4px 0 3px 0!important;overflow:visible!important;white-space:normal;}
+.da-brand-sub {font-size:1rem;line-height:1.55;color:var(--muted);margin:0;padding:0 0 2px 0;overflow:visible!important;}
+.da-login {max-width:560px;margin:2.3rem auto 0 auto;text-align:center;overflow:visible!important;}
+.da-login-logo {display:block;width:min(420px,90%);height:auto;max-height:150px;object-fit:contain;margin:0 auto 20px auto;overflow:visible!important;}
+.da-login-title {font-family:Arial,Helvetica,sans-serif;font-size:1.95rem;font-weight:800;line-height:1.28!important;margin:0 0 8px 0!important;padding:5px 0!important;overflow:visible!important;color:var(--ink);}
+.da-login-sub {font-size:.98rem;color:var(--muted);line-height:1.5;margin-bottom:18px;}
 .step {padding:11px 14px;border-radius:10px;background:var(--panel);border:1px solid #dbe6e9;margin-bottom:7px;}
-.kpi {border:1px solid #dde6e8;border-radius:12px;padding:14px;background:white;min-height:94px;}
-.kpi .v {font-size:1.55rem;font-weight:750;color:var(--ink)}
-.kpi .l {font-size:.83rem;color:var(--muted)}
 .small-note {font-size:.82rem;color:#68777d;}
 .source-box {background:#f7fafb;border-left:4px solid #91b7bf;padding:10px 12px;margin:5px 0;border-radius:4px;}
-.brand-wrap{display:flex;align-items:center;gap:18px;margin-bottom:8px}.brand-logo img{max-height:70px;object-fit:contain}.status-pill{display:inline-block;padding:4px 9px;border-radius:999px;background:#eef5f6;color:#35515b;font-size:.78rem;border:1px solid #d7e5e8}.muted-card{background:#f7fafb;border:1px solid #e2eaec;border-radius:12px;padding:12px 14px}
+.status-pill{display:inline-block;padding:4px 9px;border-radius:999px;background:#eef5f6;color:#35515b;font-size:.78rem;border:1px solid #d7e5e8}
+.muted-card{background:#f7fafb;border:1px solid #e2eaec;border-radius:12px;padding:12px 14px}
+[data-testid="stHeadingWithActionElements"], [data-testid="stHeadingWithActionElements"] * {overflow:visible!important;}
+[data-testid="stHeadingWithActionElements"] h1, [data-testid="stHeadingWithActionElements"] h2, [data-testid="stHeadingWithActionElements"] h3 {line-height:1.32!important;padding-top:.18rem!important;padding-bottom:.14rem!important;}
+@media (max-width:900px){.da-brand{gap:16px;align-items:flex-start;}.da-brand-logo{flex-basis:145px}.da-brand-logo img{width:145px}.da-brand-title{font-size:1.85rem}.da-brand-sub{font-size:.9rem}}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -39,25 +48,35 @@ st.markdown(CSS, unsafe_allow_html=True)
 ASSETS_DIR = Path(__file__).parent / "assets"
 LOGO_PATH = ASSETS_DIR / "logo.png"
 
+def _image_data_uri(path: Path) -> str:
+    if not path.exists():
+        return ""
+    mime = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+    return f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode("ascii")
+
 def show_brand(compact: bool = False):
-    # Logótipo com largura fixa para nunca ser cortado por colunas responsivas.
-    c1, c2 = st.columns([0.18, 0.82], vertical_alignment="center")
-    with c1:
-        if LOGO_PATH.exists():
-            st.image(str(LOGO_PATH), width=170 if not compact else 145)
-    with c2:
-        st.title("Estudo Inteligente de Viabilidade")
-        st.markdown("<div class='da-sub'>Da localização às regras urbanísticas, condicionantes e cenários preliminares.</div>", unsafe_allow_html=True)
+    logo_uri = _image_data_uri(LOGO_PATH)
+    logo_html = f'<img src="{logo_uri}" alt="doisarquitectos">' if logo_uri else ''
+    st.markdown(f"""<div class="da-brand">
+      <div class="da-brand-logo">{logo_html}</div>
+      <div class="da-brand-copy">
+        <div class="da-brand-title">Estudo Inteligente de Viabilidade</div>
+        <div class="da-brand-sub">Da localização às regras urbanísticas, condicionantes e cenários preliminares.</div>
+      </div>
+    </div>""", unsafe_allow_html=True)
 
 
 def login():
     if st.session_state.get("authenticated"):
         return True
-    c1,c2,c3 = st.columns([1,1.2,1])
+    logo_uri = _image_data_uri(LOGO_PATH)
+    logo_html = f'<img class="da-login-logo" src="{logo_uri}" alt="doisarquitectos">' if logo_uri else ''
+    c1,c2,c3 = st.columns([1,1.35,1])
     with c2:
-        if LOGO_PATH.exists():
-            st.image(str(LOGO_PATH), width=290)
-        st.markdown("<h2 style='text-align:center;line-height:1.35;margin:8px 0 4px 0'>Estudo Inteligente de Viabilidade</h2><div class='da-sub' style='text-align:center'>Análise preliminar territorial e urbanística assistida por IA</div>", unsafe_allow_html=True)
+        st.markdown(f"""<div class="da-login">{logo_html}
+          <div class="da-login-title">Estudo Inteligente de Viabilidade</div>
+          <div class="da-login-sub">Análise preliminar territorial e urbanística assistida por IA</div>
+        </div>""", unsafe_allow_html=True)
         with st.form("login"):
             user = st.text_input("Utilizador", value="admin1")
             pwd = st.text_input("Password", type="password")
@@ -224,40 +243,54 @@ elif page.startswith("2"):
             st.json(data)
 
 elif page.startswith("3"):
-    st.subheader("3. Pesquisa territorial e regulamentar pela IA")
-    st.write("A IA procura fontes oficiais atuais: SIG/geoportal, PDM e alterações, Diário da República, DGT/SNIT e regimes especiais relevantes. O objetivo é descobrir as regras; não exigir que o arquiteto as anexe.")
+    st.subheader("3. Pesquisa territorial e regulamentar")
+    st.write("A aplicação cruza a localização e a documentação já analisada com fontes oficiais atuais. A pesquisa é compacta e orientada apenas às regras relevantes para o terreno.")
     c1,c2,c3 = st.columns(3)
     c1.metric("Município", study.get("municipality") or "A confirmar")
     c2.metric("Freguesia", study.get("parish") or "A confirmar")
     c3.metric("Área aprox.", f"{study.get('estimated_area_m2'):,.0f} m²" if study.get("estimated_area_m2") else "A confirmar")
-    if st.button("🌐 Pesquisar PDM, SIG, legislação e condicionantes", type="primary"):
-        status = st.status("A pesquisar fontes territoriais e regulamentares…", expanded=True)
+
+    if st.button("🌐 Pesquisar e construir matriz urbanística", type="primary"):
+        status = st.status("A preparar pesquisa territorial…", expanded=True)
+        ctx = {k:study.get(k) for k in ["study_ref","location_text","municipality","parish","district","lat","lon","estimated_area_m2","objective","priority"]}
         try:
-            status.write("A procurar PDM/SIG, Diário da República e restantes fontes oficiais relevantes.")
+            status.write("1/4 · A preparar contexto do terreno e documentos relevantes.")
             svc = GeminiService()
-            ctx = {k:study.get(k) for k in ["study_ref","location_text","municipality","parish","district","lat","lon","estimated_area_m2","objective","priority"]}
+            status.write("2/4 · A procurar PDM/IGT e fontes oficiais prioritárias.")
             study["web_research"] = svc.web_research(ctx, study.get("documents_analysis",{}))
+            status.write("3/4 · A recolher referências e fundamentos rastreáveis.")
+            status.write("4/4 · A cruzar documentos + fontes e estruturar regras do jogo.")
+            study["rules"] = svc.synthesize_rules(ctx, study.get("documents_analysis",{}), study.get("web_research",{}))
             used = study["web_research"].get("model_used", "")
-            status.update(label=f"Pesquisa concluída{f' · {used}' if used else ''}", state="complete", expanded=False)
-            st.success("Pesquisa concluída. Reveja as fontes antes de validar.")
+            status.update(label=f"Pesquisa e matriz concluídas{f' · {used}' if used else ''}", state="complete", expanded=False)
+            st.success("Pesquisa concluída. A matriz urbanística está pronta para revisão na etapa 4.")
         except Exception as e:
-            status.update(label="Pesquisa não concluída", state="error", expanded=True)
-            st.error(str(e))
+            status.update(label="Pesquisa online incompleta", state="error", expanded=True)
+            study["web_research"] = study.get("web_research") or {"text":"", "citations":[], "queries":[], "error":str(e)}
+            try:
+                status.write("A tentar construir uma matriz provisória apenas com localização + documentação já fornecida.")
+                svc2 = GeminiService()
+                study["rules"] = svc2.synthesize_rules(ctx, study.get("documents_analysis",{}), study.get("web_research",{}))
+                st.warning("A pesquisa online não ficou completa, mas foi criada uma matriz provisória. Tudo o que não tem fonte oficial confirmada permanece marcado como A CONFIRMAR.")
+            except Exception:
+                st.error(str(e))
+                st.info("A documentação já analisada permanece guardada. Pode repetir apenas a pesquisa mais tarde sem voltar a carregar os ficheiros.")
+
     if study.get("web_research"):
-        st.markdown(study["web_research"].get("text", ""))
-        if study["web_research"].get("citations"):
-            st.markdown("#### Fontes recuperadas")
-            for src in study["web_research"]["citations"]:
-                st.markdown(f"- [{src.get('title') or src.get('url')}]({src.get('url')})")
-        if st.button("✅ Cruzar documentos + fontes e construir regras do jogo"):
-            with st.spinner("A validar e estruturar parâmetros..."):
-                try:
-                    svc = GeminiService()
-                    ctx = {k:study.get(k) for k in ["study_ref","location_text","municipality","parish","district","lat","lon","estimated_area_m2","objective","priority"]}
-                    study["rules"] = svc.synthesize_rules(ctx, study.get("documents_analysis",{}), study.get("web_research",{}))
-                    st.success("Matriz técnica criada.")
-                except Exception as e:
-                    st.error(f"Erro: {e}")
+        wr = study["web_research"]
+        if wr.get("text"):
+            st.markdown("#### Síntese da pesquisa")
+            clean = str(wr.get("text",""))
+            if "```" in clean:
+                clean = clean.replace("```python", "").replace("```json", "").replace("```", "")
+            st.write(clean[:12000])
+        if wr.get("citations"):
+            st.markdown("#### Fontes oficiais/localizadas")
+            for src in wr["citations"][:25]:
+                title = src.get("title") or src.get("url")
+                st.markdown(f"- [{title}]({src.get('url')})")
+        if study.get("rules"):
+            st.info("✅ Regras estruturadas. Pode avançar para **4. Regras do jogo**.")
 
 elif page.startswith("4"):
     st.subheader("4. Regras do jogo e condicionantes")
@@ -283,11 +316,6 @@ elif page.startswith("4"):
             st.json(rules["conflicts"])
         if rules.get("critical_questions"):
             st.warning("Pontos a confirmar: " + " · ".join(map(str,rules["critical_questions"])))
-        if st.button("🧮 Validar e calcular capacidade", type="primary"):
-            study["calculations"] = calculate_capacity(rules, study.get("estimated_area_m2"))
-            st.success("Cálculos executados em Python.")
-        if study.get("calculations"):
-            st.json(study["calculations"])
 
 elif page.startswith("5"):
     st.subheader("5. Cálculos de capacidade urbanística")
