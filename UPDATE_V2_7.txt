@@ -1,0 +1,8 @@
+V2.7 — hotfix de produção da API Gemini
+
+- Removido totalmente o endpoint gemini-2.5-flash do código e dos defaults.
+- Pesquisa territorial usa apenas GEMINI_MODEL e GEMINI_FALLBACK_MODELS configurados nos Secrets.
+- Erro 404/modelo removido passa imediatamente ao modelo seguinte.
+- 429/5xx/timeouts fazem retry curto e fallback automático.
+- Erros técnicos da Google deixam de bloquear o fluxo com mensagens cruas.
+- Versão visível na aplicação atualizada para V2.7.

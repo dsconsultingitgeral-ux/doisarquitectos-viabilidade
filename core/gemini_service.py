@@ -26,30 +26,53 @@ class GeminiService:
         self.client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_MS))
         self.model = model or GEMINI_MODEL
         self.models=[]
-        for m in [self.model, "gemini-2.5-flash"] + list(GEMINI_FALLBACK_MODELS):
+        for m in [self.model] + list(GEMINI_FALLBACK_MODELS):
             if m and m not in self.models: self.models.append(m)
         self.last_model_used=None
 
     @staticmethod
-    def _is_retryable(exc: Exception) -> bool:
-        t=str(exc).lower()
-        return any(x in t for x in ["503","unavailable","high demand","overloaded","capacity","429","resource_exhausted","rate limit","504","deadline_exceeded","timeout"])
+    def _error_kind(exc: Exception) -> str:
+        """Classifica erros da API sem expor detalhes técnicos ao utilizador final."""
+        t = str(exc).lower()
+        if any(x in t for x in ["404", "not_found", "no longer available", "model not found"]):
+            return "model_unavailable"
+        if any(x in t for x in ["401", "403", "unauthenticated", "permission_denied", "api key not valid", "invalid api key"]):
+            return "auth"
+        if any(x in t for x in ["429", "resource_exhausted", "rate limit", "quota"]):
+            return "rate_limit"
+        if any(x in t for x in ["503", "unavailable", "high demand", "overloaded", "capacity", "504", "deadline_exceeded", "timeout", "502", "500"]):
+            return "temporary"
+        return "other"
 
     def _generate(self, *, contents, config, operation="análise", models=None):
-        models=models or self.models
-        errors=[]
+        models = models or self.models
+        last_errors=[]
         for model in models:
+            # Dois ensaios por modelo apenas para erros temporários/rate-limit.
             for attempt in range(2):
                 try:
-                    r=self.client.models.generate_content(model=model, contents=contents, config=config)
-                    self.last_model_used=model
+                    r = self.client.models.generate_content(model=model, contents=contents, config=config)
+                    self.last_model_used = model
                     return r
                 except Exception as e:
-                    errors.append(f"{model}/{attempt+1}: {e}")
-                    if not self._is_retryable(e): raise
-                    if attempt == 0: time.sleep(0.7 + random.random()*0.5)
-            time.sleep(0.4)
-        raise GeminiTemporarilyUnavailable(f"O serviço Gemini está temporariamente indisponível para {operation}. Tente novamente dentro de instantes.")
+                    kind = self._error_kind(e)
+                    last_errors.append((model, kind, str(e)))
+                    if kind == "auth":
+                        raise RuntimeError("A autenticação da API Gemini falhou. Verifique a chave configurada nos Secrets do Streamlit.") from e
+                    if kind == "model_unavailable":
+                        # Endpoint removido/indisponível: passa imediatamente ao próximo modelo.
+                        break
+                    if kind in ("temporary", "rate_limit"):
+                        if attempt == 0:
+                            time.sleep(1.2 + random.random()*0.8)
+                            continue
+                        break
+                    # Erro inesperado: tenta o próximo modelo uma vez, em vez de bloquear todo o estudo.
+                    break
+            time.sleep(0.15)
+        raise GeminiTemporarilyUnavailable(
+            f"Não foi possível concluir {operation} neste momento. A aplicação tentou automaticamente os modelos disponíveis; os dados do estudo ficaram guardados."
+        )
 
     def analyze_documents(self, uploaded_files) -> Dict[str, Any]:
         contents=[]; manifest=[]
@@ -65,9 +88,9 @@ class GeminiService:
 
     def _grounded_json(self, prompt: str, operation: str) -> Dict[str, Any]:
         tool=types.Tool(google_search=types.GoogleSearch())
-        # Para pesquisa pública, privilegia 2.5 Flash pela disponibilidade/latência.
+        # Usa exclusivamente os modelos configurados nos Secrets. Nunca força um endpoint obsoleto.
         models=[]
-        for m in ["gemini-2.5-flash", self.model] + list(GEMINI_FALLBACK_MODELS):
+        for m in [self.model] + list(GEMINI_FALLBACK_MODELS):
             if m and m not in models: models.append(m)
         r=self._generate(contents=SYSTEM_PROMPT+"\n\n"+prompt,config=types.GenerateContentConfig(temperature=0.01,tools=[tool]),operation=operation,models=models)
         text=r.text or ""

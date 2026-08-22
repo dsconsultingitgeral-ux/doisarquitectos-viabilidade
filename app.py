@@ -278,7 +278,7 @@ with st.sidebar:
         st.markdown(f"<div class='step'>{'✅' if done else '○'} <b>{n}. {name}</b></div>", unsafe_allow_html=True)
     st.divider()
     page = st.radio("Navegação", ["1 · Localização", "2 · Documentação", "3 · Pesquisa IA", "4 · Regras e condicionantes", "5 · Cálculos", "6 · Cenários", "7 · Relatório"], label_visibility="collapsed")
-    st.caption(f"IA principal: {GEMINI_MODEL} · V2.6")
+    st.caption(f"IA principal: {GEMINI_MODEL} · V2.7")
     if st.button("↺ Novo estudo / limpar dados", use_container_width=True):
         for key in ["study", "quick_docs", "all_docs"]:
             st.session_state.pop(key, None)

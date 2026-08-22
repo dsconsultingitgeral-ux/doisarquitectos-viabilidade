@@ -1,4 +1,4 @@
-# doisarquitectos — Estudo Inteligente de Viabilidade V2.6
+# doisarquitectos — Estudo Inteligente de Viabilidade V2.7
 
 Aplicação Streamlit para estudo preliminar de viabilidade urbanística em Portugal.
 
@@ -17,7 +17,7 @@ GEMINI_API_KEY = "..."
 APP_USER = "admin1"
 APP_PASSWORD = "..."
 GEMINI_MODEL = "gemini-3.6-flash"
-GEMINI_FALLBACK_MODELS = "gemini-2.5-flash,gemini-3.5-flash,gemini-3.7-flash"
+GEMINI_FALLBACK_MODELS = "gemini-3.7-flash"
 GEMINI_TIMEOUT_MS = 45000
 ```
 
