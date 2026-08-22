@@ -13,6 +13,7 @@ DEFAULTS = {
     "geo_lon": None,
     "geo_display_name": "",
     "geo_source_url": "",
+    "geo_precision": "",
     "parcel_polygon_geojson": None,
     "parcel_polygon_coords": [],
     "uploaded_files": [],

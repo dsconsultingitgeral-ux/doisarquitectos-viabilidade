@@ -139,25 +139,36 @@ if step == 1:
                 with st.spinner("A localizar…"):
                     geo = geocode_location(query)
                 if geo:
-                    st.session_state.location = query.strip()
+                    inf = inferred_fields(geo)
+
+                    # When the exact street is found, use the resolved address as
+                    # the canonical location. When only the parish/locality is
+                    # available, keep the user's original text and make the
+                    # lower precision explicit instead of pretending it is exact.
+                    if inf.get("precision") == "exact_street":
+                        st.session_state.location = inf["concise"] or query.strip()
+                    else:
+                        st.session_state.location = query.strip()
+
                     st.session_state.geo_lat = geo.lat
                     st.session_state.geo_lon = geo.lon
                     st.session_state.geo_display_name = geo.display_name
                     st.session_state.geo_source_url = geo.source_url
-
-                    inf = inferred_fields(geo)
                     st.session_state.municipality = inf["municipality"]
                     st.session_state.parish = inf["parish"]
                     st.session_state.locality = inf["locality"]
+                    st.session_state["geo_precision"] = inf.get("precision", "unknown")
 
                     # Synchronize text widgets only on the NEXT run.
                     st.session_state["_pending_municipality"] = inf["municipality"]
                     st.session_state["_pending_parish"] = inf["parish"]
                     st.session_state["_pending_locality"] = inf["locality"]
+                    if inf.get("precision") == "exact_street":
+                        st.session_state["_pending_location_search"] = st.session_state.location
                     st.session_state["last_map_click"] = None
                     st.rerun()
                 else:
-                    st.warning("Não encontrei uma localização inequívoca. Clique diretamente no mapa.")
+                    st.warning("Não encontrei a morada. Clique diretamente no mapa para selecionar o ponto exato.")
             except Exception as exc:
                 st.warning("Não foi possível concluir a pesquisa de localização.")
                 st.caption(str(exc))
@@ -168,8 +179,18 @@ if step == 1:
     zoom = 17 if st.session_state.geo_lat is not None else 7
 
     st.markdown("### Mapa")
+
+    precision = st.session_state.get("geo_precision")
+    if precision == "locality":
+        st.warning(
+            "A freguesia/localidade foi identificada, mas a rua exata não ficou confirmada automaticamente. "
+            "Selecione o ponto exato no mapa."
+        )
+    elif precision == "exact_street":
+        st.success("Morada localizada ao nível da rua. Confirme visualmente o ponto no mapa.")
+
     st.caption(
-        "Clique num ponto para obter a rua/localização. "
+        "Clique num ponto para corrigir ou confirmar a morada. "
         "Use a ferramenta de desenho no canto do mapa para marcar o perímetro aproximado do terreno."
     )
 
@@ -237,6 +258,7 @@ if step == 1:
                     st.session_state.municipality = inf["municipality"]
                     st.session_state.parish = inf["parish"]
                     st.session_state.locality = inf["locality"]
+                    st.session_state["geo_precision"] = "exact_street"
 
                     # Safe widget updates on next run.
                     st.session_state["_pending_location_search"] = inf["concise"]
