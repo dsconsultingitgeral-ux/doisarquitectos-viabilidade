@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+from pathlib import Path
 from datetime import datetime
 import pandas as pd
 import streamlit as st
@@ -20,17 +21,29 @@ CSS = """
 <style>
 :root { --ink:#1f2d33; --muted:#62727a; --accent:#91b7bf; --panel:#f5f8f9; }
 .block-container { padding-top: 1.5rem; max-width: 1500px; }
-.da-title {font-size:2rem;font-weight:750;letter-spacing:-.02em;color:var(--ink);}
-.da-sub {color:var(--muted);margin-top:-8px;margin-bottom:18px;}
+.da-title {font-size:2rem;font-weight:750;letter-spacing:-.02em;color:var(--ink);line-height:1.25;padding-top:.18rem;overflow:visible;margin:0;}
+.da-sub {color:var(--muted);margin-top:2px;margin-bottom:18px;line-height:1.35;}
 .step {padding:11px 14px;border-radius:10px;background:var(--panel);border:1px solid #dbe6e9;margin-bottom:7px;}
 .kpi {border:1px solid #dde6e8;border-radius:12px;padding:14px;background:white;min-height:94px;}
 .kpi .v {font-size:1.55rem;font-weight:750;color:var(--ink)}
 .kpi .l {font-size:.83rem;color:var(--muted)}
 .small-note {font-size:.82rem;color:#68777d;}
 .source-box {background:#f7fafb;border-left:4px solid #91b7bf;padding:10px 12px;margin:5px 0;border-radius:4px;}
+.brand-wrap{display:flex;align-items:center;gap:18px;margin-bottom:8px}.brand-logo img{max-height:76px;object-fit:contain}.status-pill{display:inline-block;padding:4px 9px;border-radius:999px;background:#eef5f6;color:#35515b;font-size:.78rem;border:1px solid #d7e5e8}.muted-card{background:#f7fafb;border:1px solid #e2eaec;border-radius:12px;padding:12px 14px}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
+
+ASSETS_DIR = Path(__file__).parent / "assets"
+LOGO_PATH = ASSETS_DIR / "logo.png"
+
+def show_brand(compact: bool = False):
+    c1, c2 = st.columns([0.34 if compact else 0.28, 1.72], vertical_alignment="center")
+    with c1:
+        if LOGO_PATH.exists():
+            st.image(str(LOGO_PATH), use_container_width=True)
+    with c2:
+        st.markdown("<div class='da-title'>Estudo Inteligente de Viabilidade</div><div class='da-sub'>Da localização às regras urbanísticas, condicionantes e cenários preliminares.</div>", unsafe_allow_html=True)
 
 
 def login():
@@ -38,7 +51,9 @@ def login():
         return True
     c1,c2,c3 = st.columns([1,1.2,1])
     with c2:
-        st.markdown("<div class='da-title'>doisarquitectos</div><div class='da-sub'>Estudo Inteligente de Viabilidade Urbanística</div>", unsafe_allow_html=True)
+        if LOGO_PATH.exists():
+            st.image(str(LOGO_PATH), use_container_width=True)
+        st.markdown("<div class='da-title' style='text-align:center'>Estudo Inteligente de Viabilidade</div><div class='da-sub' style='text-align:center'>Análise preliminar territorial e urbanística assistida por IA</div>", unsafe_allow_html=True)
         with st.form("login"):
             user = st.text_input("Utilizador", value="admin1")
             pwd = st.text_input("Password", type="password")
@@ -58,7 +73,8 @@ if not login():
 if "study" not in st.session_state:
     st.session_state.study = {
         "study_ref":"", "client_name":"", "location_text":"", "municipality":"", "parish":"", "district":"",
-        "lat":40.64, "lon":-8.65, "polygon_geojson":None, "estimated_area_m2":None,
+        "lat":39.65, "lon":-8.00, "polygon_geojson":None, "estimated_area_m2":None,
+        "last_geocoded_query":"", "geocode_display_name":"", "geocode_source":"", "geocode_ok":False,
         "objective":"Determinar o melhor aproveitamento admissível",
         "priority":"Equilíbrio entre aproveitamento e risco",
         "documents_analysis":{}, "web_research":{}, "rules":{}, "calculations":{}, "scenarios":[]
@@ -80,11 +96,15 @@ with st.sidebar:
         st.markdown(f"<div class='step'>{'✅' if done else '○'} <b>{n}. {name}</b></div>", unsafe_allow_html=True)
     st.divider()
     page = st.radio("Navegação", ["1 · Localização", "2 · Documentação", "3 · Pesquisa IA", "4 · Regras e condicionantes", "5 · Cenários", "6 · Relatório"], label_visibility="collapsed")
-    st.caption(f"Modelo: {GEMINI_MODEL}")
+    st.caption(f"IA principal: {GEMINI_MODEL}")
+    if st.button("↺ Novo estudo / limpar dados", use_container_width=True):
+        for key in ["study", "quick_docs", "all_docs"]:
+            st.session_state.pop(key, None)
+        st.rerun()
     if not GEMINI_API_KEY:
         st.warning("API Gemini não configurada.")
 
-st.markdown("<div class='da-title'>Estudo Inteligente de Viabilidade</div><div class='da-sub'>Da localização às regras urbanísticas, condicionantes e cenários preliminares.</div>", unsafe_allow_html=True)
+show_brand()
 
 if page.startswith("1"):
     st.subheader("1. Localização e identificação rápida")
@@ -97,22 +117,45 @@ if page.startswith("1"):
         study["location_text"] = loc
     with c3:
         if st.button("🔎 Localizar", use_container_width=True):
+            # Uma nova morada nunca pode herdar o polígono/área do estudo anterior.
+            if loc.strip() != (study.get("last_geocoded_query") or "").strip():
+                study["polygon_geojson"] = None
+                study["estimated_area_m2"] = None
+                study["documents_analysis"] = {}
+                study["web_research"] = {}
+                study["rules"] = {}
+                study["calculations"] = {}
+                study["scenarios"] = []
             try:
                 results = geocode_location(loc)
                 if results:
                     r = results[0]
                     study["lat"], study["lon"] = float(r["lat"]), float(r["lon"])
                     ad = r.get("address", {})
-                    study["municipality"] = ad.get("city") or ad.get("town") or ad.get("municipality") or ""
+                    study["municipality"] = ad.get("municipality") or ad.get("city") or ad.get("town") or ""
                     study["parish"] = ad.get("suburb") or ad.get("village") or ad.get("city_district") or ""
                     study["district"] = ad.get("state") or ""
-                    st.success("Localização aproximada encontrada.")
+                    study["last_geocoded_query"] = loc.strip()
+                    study["geocode_display_name"] = r.get("display_name", loc)
+                    study["geocode_source"] = r.get("source", "geocodificador")
+                    study["geocode_ok"] = True
+                    st.success(f"Localização encontrada: {study['geocode_display_name']}")
                 else:
-                    st.warning("Não foi possível geocodificar automaticamente. Pode posicionar/desenhar no mapa.")
+                    study["geocode_ok"] = False
+                    study["lat"], study["lon"] = 39.65, -8.00
+                    study["municipality"], study["parish"], study["district"] = "", "", ""
+                    st.warning("Não foi possível localizar automaticamente esta referência. Tente acrescentar código postal/concelho ou indique o ponto no mapa.")
             except Exception as e:
-                st.warning(f"Pesquisa de morada indisponível: {e}")
+                study["geocode_ok"] = False
+                study["lat"], study["lon"] = 39.65, -8.00
+                st.warning(f"Pesquisa de morada temporariamente indisponível: {e}")
 
-    m = folium.Map(location=[study.get("lat",40.64), study.get("lon",-8.65)], zoom_start=17, control_scale=True, tiles="OpenStreetMap")
+    if study.get("geocode_ok"):
+        st.caption(f"Fonte da localização: {study.get('geocode_source','')} · {study.get('geocode_display_name','')}")
+
+    m = folium.Map(location=[study.get("lat",39.65), study.get("lon",-8.00)], zoom_start=17 if study.get("geocode_ok") else 7, control_scale=True, tiles="OpenStreetMap")
+    if study.get("geocode_ok"):
+        folium.Marker([study["lat"], study["lon"]], tooltip="Localização encontrada", icon=folium.Icon(color="blue", icon="info-sign")).add_to(m)
     Draw(export=False, draw_options={"polyline":False,"rectangle":True,"circle":False,"circlemarker":False,"marker":True,"polygon":True}, edit_options={"edit":True,"remove":True}).add_to(m)
     map_data = st_folium(m, height=520, use_container_width=True, returned_objects=["all_drawings","last_clicked"])
     drawings = (map_data or {}).get("all_drawings") or []
@@ -126,6 +169,14 @@ if page.startswith("1"):
         study["estimated_area_m2"] = round(area,1) if area else None
         if area:
             st.info(f"Área cartográfica aproximada: **{area:,.1f} m²**. Este valor é indicativo e deve ser substituído/confirmado por levantamento ou documento predial quando disponível.")
+
+    c_mun, c_par, c_dis = st.columns(3)
+    with c_mun:
+        study["municipality"] = st.text_input("Município (confirmar/corrigir)", value=study.get("municipality", ""))
+    with c_par:
+        study["parish"] = st.text_input("Freguesia (confirmar/corrigir)", value=study.get("parish", ""))
+    with c_dis:
+        study["district"] = st.text_input("Distrito (opcional)", value=study.get("district", ""))
 
     study["study_ref"] = study.get("study_ref") or stable_id((study.get("location_text") or "novo") + str(datetime.now().date()))
     st.markdown("#### Documento rápido do cliente — opcional")
@@ -146,13 +197,19 @@ elif page.startswith("2"):
     st.markdown("##### O classificador procura, entre outros:")
     st.caption("Levantamento topográfico · planta de localização/cartografia · plantas SIG · PDM ordenamento · PDM condicionantes · REN · RAN · incêndio · ruído · recursos hídricos · património · servidões · cadastro · caderneta · certidão · PIP · parecer/despacho · alvará/loteamento · PU/PP · estudo/projeto existente.")
     if st.button("🧠 Analisar e classificar documentação", type="primary", disabled=not all_docs):
-        with st.spinner("Gemini está a ler, classificar e extrair informação dos ficheiros..."):
-            try:
-                svc = GeminiService()
-                study["documents_analysis"] = svc.analyze_documents(all_docs)
-                st.success("Análise documental concluída.")
-            except Exception as e:
-                st.error(f"Erro na análise Gemini: {e}")
+        status = st.status("A analisar documentação com IA…", expanded=True)
+        try:
+            status.write("Leitura dos PDFs/imagens e classificação técnica.")
+            status.write("Se o modelo principal estiver ocupado, a aplicação muda automaticamente para um modelo alternativo.")
+            svc = GeminiService()
+            study["documents_analysis"] = svc.analyze_documents(all_docs)
+            used = study["documents_analysis"].get("_model_used", "") if isinstance(study["documents_analysis"], dict) else ""
+            status.update(label=f"Análise documental concluída{f' · {used}' if used else ''}", state="complete", expanded=False)
+            st.success("Documentação analisada. Confirme os dados extraídos antes de prosseguir.")
+        except Exception as e:
+            status.update(label="Não foi possível concluir a análise agora", state="error", expanded=True)
+            st.error(str(e))
+            st.info("Os ficheiros continuam carregados. Pode repetir sem voltar a anexá-los.")
     if study.get("documents_analysis"):
         data = study["documents_analysis"]
         rows = []
@@ -170,14 +227,18 @@ elif page.startswith("3"):
     c2.metric("Freguesia", study.get("parish") or "A confirmar")
     c3.metric("Área aprox.", f"{study.get('estimated_area_m2'):,.0f} m²" if study.get("estimated_area_m2") else "A confirmar")
     if st.button("🌐 Pesquisar PDM, SIG, legislação e condicionantes", type="primary"):
-        with st.spinner("A pesquisar fontes oficiais e regulamentação em vigor..."):
-            try:
-                svc = GeminiService()
-                ctx = {k:study.get(k) for k in ["study_ref","location_text","municipality","parish","district","lat","lon","estimated_area_m2","objective","priority"]}
-                study["web_research"] = svc.web_research(ctx, study.get("documents_analysis",{}))
-                st.success("Pesquisa concluída. Reveja as fontes antes de validar.")
-            except Exception as e:
-                st.error(f"Erro na pesquisa: {e}")
+        status = st.status("A pesquisar fontes territoriais e regulamentares…", expanded=True)
+        try:
+            status.write("A procurar PDM/SIG, Diário da República e restantes fontes oficiais relevantes.")
+            svc = GeminiService()
+            ctx = {k:study.get(k) for k in ["study_ref","location_text","municipality","parish","district","lat","lon","estimated_area_m2","objective","priority"]}
+            study["web_research"] = svc.web_research(ctx, study.get("documents_analysis",{}))
+            used = study["web_research"].get("model_used", "")
+            status.update(label=f"Pesquisa concluída{f' · {used}' if used else ''}", state="complete", expanded=False)
+            st.success("Pesquisa concluída. Reveja as fontes antes de validar.")
+        except Exception as e:
+            status.update(label="Pesquisa não concluída", state="error", expanded=True)
+            st.error(str(e))
     if study.get("web_research"):
         st.markdown(study["web_research"].get("text", ""))
         if study["web_research"].get("citations"):

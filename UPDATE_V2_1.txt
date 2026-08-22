@@ -1,0 +1,10 @@
+V2.1 - CORREÇÕES
+
+1. Logo doisarquitectos integrado no login e cabeçalho.
+2. Correção visual do título (line-height/padding para não cortar letras).
+3. Geocodificação melhorada: OpenStreetMap/Nominatim + ArcGIS fallback.
+4. Ao mudar de morada, limpa polígono/área/resultados antigos para não mostrar dados do estudo anterior.
+5. Município/freguesia/distrito podem ser confirmados/corrigidos manualmente.
+6. Gemini: modelo principal 3.6 Flash, timeout e fallback automático para 3.5 Flash e 3.7 Flash em 429/503/504.
+7. Mensagens de estado mais claras e sem expor erro técnico 503 como experiência normal do utilizador.
+8. Botão para iniciar novo estudo e limpar dados da sessão.
