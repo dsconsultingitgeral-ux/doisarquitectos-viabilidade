@@ -6,6 +6,7 @@ from pathlib import Path
 import os
 import tempfile
 import time
+import hashlib
 
 from google import genai
 from google.genai import types
@@ -78,17 +79,39 @@ def upload_files(files: Iterable[Any]) -> list[Any]:
     client = get_client()
     uploaded_files = []
 
+    try:
+        import streamlit as st
+        cache = st.session_state.setdefault("_gemini_file_cache", {})
+    except Exception:
+        cache = {}
+
     for f in files:
+        raw = f.getvalue()
+        digest = hashlib.sha256(raw).hexdigest()
+        cached_name = cache.get(digest)
+
+        if cached_name:
+            try:
+                uploaded = client.files.get(name=cached_name)
+                uploaded = _wait_until_ready(client, uploaded)
+                uploaded_files.append(uploaded)
+                continue
+            except Exception:
+                cache.pop(digest, None)
+
         suffix = Path(f.name).suffix or ".bin"
         temp_path = None
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(f.getvalue())
+                tmp.write(raw)
                 temp_path = tmp.name
 
             uploaded = client.files.upload(file=temp_path)
             uploaded = _wait_until_ready(client, uploaded)
             uploaded_files.append(uploaded)
+
+            if getattr(uploaded, "name", None):
+                cache[digest] = uploaded.name
         finally:
             if temp_path:
                 try:

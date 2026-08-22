@@ -8,44 +8,33 @@ def inject_css():
     st.markdown("""
     <style>
       :root{
-        --ink:#171D2A;
+        --ink:#111827;
         --muted:#6B7280;
         --line:#E7E9EE;
-        --paper:#FFFFFF;
         --soft:#F7F8FA;
-        --accent:#1C2638;
+        --soft2:#FBFBFC;
+        --accent:#171D2A;
       }
 
-      html, body, [class*="css"] { font-family: Inter, "Helvetica Neue", Arial, sans-serif; }
-      .stApp { background:#FFFFFF; }
-
-      /* Do not let Streamlit's top chrome cut the page */
+      .stApp { background:#fff; }
       .block-container{
-        max-width:1160px;
-        padding-top:3.5rem !important;
+        max-width:1180px;
+        padding-top:3.2rem !important;
         padding-bottom:4rem;
       }
 
       section[data-testid="stSidebar"]{
         width:270px !important;
-        background:#F7F8FA;
+        background:#F8F9FA;
         border-right:1px solid #ECEEF2;
       }
-      section[data-testid="stSidebar"] > div{
-        padding-top:2.1rem;
-      }
+      section[data-testid="stSidebar"] > div{ padding-top:1.8rem; }
 
-      .da-brand{
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        margin:0 auto 1.2rem;
-      }
       .da-kicker{
-        font-size:11px;
-        letter-spacing:.17em;
+        font-size:10.5px;
+        letter-spacing:.18em;
         font-weight:800;
-        color:#697386;
+        color:#7C8593;
         text-transform:uppercase;
       }
       .da-title{
@@ -53,114 +42,102 @@ def inject_css():
         font-size:38px;
         line-height:1.04;
         font-weight:760;
-        letter-spacing:-.03em;
-        margin:.35rem 0 .55rem;
+        letter-spacing:-.035em;
+        margin:.35rem 0 .5rem;
       }
       .da-sub{
         color:var(--muted);
         font-size:15px;
         line-height:1.55;
-        margin-bottom:1.35rem;
+        margin-bottom:1.2rem;
       }
 
       .da-step{
-        padding:12px 13px;
+        padding:11px 12px;
         border-radius:13px;
         border:1px solid var(--line);
         background:white;
-        font-size:12.5px;
+        font-size:12px;
         font-weight:700;
         text-align:center;
-        color:#384152;
+        color:#444D5C;
         white-space:nowrap;
       }
       .da-step-active{
         background:var(--accent);
         color:white;
         border-color:var(--accent);
-        box-shadow:0 8px 22px rgba(28,38,56,.10);
       }
 
       .da-hero{
         background:#F7F8FA;
         border:1px solid #ECEEF2;
-        border-radius:22px;
-        padding:24px 26px;
-        margin:8px 0 22px;
+        border-radius:20px;
+        padding:22px 24px;
+        margin:8px 0 20px;
       }
       .da-hero .big{
-        color:var(--ink);
-        font-size:24px;
-        font-weight:760;
+        color:#141A24;
+        font-size:23px;
+        font-weight:740;
         letter-spacing:-.02em;
       }
       .da-hero .small{
         color:#667085;
         margin-top:6px;
-        font-size:14px;
+        font-size:13.5px;
         line-height:1.55;
       }
 
       .da-card{
-        background:white;
-        border:1px solid var(--line);
+        background:#fff;
+        border:1px solid #E7E9EE;
         border-radius:18px;
-        padding:18px 20px;
-        box-shadow:0 7px 24px rgba(17,24,39,.045);
-        height:100%;
+        padding:18px 18px 17px;
+        min-height:132px;
+        box-shadow:0 6px 24px rgba(17,24,39,.035);
       }
       .da-card-label{
-        font-size:10.5px;
+        font-size:10px;
         letter-spacing:.10em;
         text-transform:uppercase;
-        color:#7A8493;
+        color:#8A93A3;
         font-weight:800;
       }
       .da-card-value{
-        font-size:25px;
-        font-weight:760;
-        margin-top:4px;
-        color:var(--ink);
-        letter-spacing:-.025em;
+        font-size:22px;
+        line-height:1.18;
+        font-weight:730;
+        margin-top:8px;
+        color:#151A23;
+        letter-spacing:-.022em;
+        overflow-wrap:anywhere;
       }
-      .da-card-note{font-size:12px;color:#7A8493;margin-top:3px;}
-
-      .da-map-shell{
-        border:1px solid #E4E7EC;
-        border-radius:20px;
-        overflow:hidden;
-        background:white;
-        box-shadow:0 8px 28px rgba(17,24,39,.055);
-        padding:7px 7px 0;
-        margin:8px 0 4px;
-      }
-      .da-map-hint{
-        font-size:12.5px;
-        line-height:1.5;
-        color:#667085;
-        padding:8px 4px 12px;
+      .da-card-note{
+        font-size:11.5px;
+        color:#8A93A3;
+        margin-top:8px;
+        line-height:1.4;
       }
 
-      .da-status-good{background:#F0FDF4;border:1px solid #BBF7D0;padding:15px 17px;border-radius:14px;}
-      .da-status-warn{background:#FFFBEB;border:1px solid #FDE68A;padding:15px 17px;border-radius:14px;}
-      .da-status-bad{background:#FEF2F2;border:1px solid #FECACA;padding:15px 17px;border-radius:14px;}
+      .da-status-good{background:#F2FBF5;border:1px solid #C8EFD2;padding:15px 17px;border-radius:15px;}
+      .da-status-warn{background:#FFFBF0;border:1px solid #F3E0A1;padding:15px 17px;border-radius:15px;}
+      .da-status-bad{background:#FFF3F3;border:1px solid #F3C1C1;padding:15px 17px;border-radius:15px;}
 
       .source-box{
-        background:#FAFAFA;
+        background:#FAFAFB;
         border:1px solid #ECEEF2;
-        border-left:4px solid var(--accent);
+        border-left:3px solid #202938;
         padding:12px 14px;
         margin:8px 0;
         border-radius:10px;
       }
 
-      div[data-testid="stTextInput"] input,
-      div[data-testid="stNumberInput"] input{
+      div[data-testid="stTextInput"] input{
+        min-height:45px;
         border-radius:12px !important;
-        min-height:46px;
         background:#FBFCFD;
       }
-
       div[data-testid="stButton"] button,
       div[data-testid="stDownloadButton"] button{
         min-height:44px;
@@ -168,47 +145,32 @@ def inject_css():
         font-weight:700;
       }
 
-      /* Avoid oversized Streamlit logo/image scaling */
+      /* Keep original logo crisp: browsers downscale high-res raster very well. */
       div[data-testid="stImage"] img{
         object-fit:contain;
+        image-rendering:auto;
       }
 
-      /* Folium iframe container */
-      iframe{
-        border-radius:14px !important;
-      }
+      iframe{ border-radius:14px !important; }
 
-      @media(max-width: 900px){
+      @media(max-width:900px){
         .block-container{padding-top:2.5rem !important;}
         .da-title{font-size:31px;}
-        section[data-testid="stSidebar"]{width:240px !important;}
       }
     </style>
     """, unsafe_allow_html=True)
 
-def _logo_path():
-    candidates = [
-        ROOT/"assets"/"logo.png",
-        ROOT/"assets"/"logo.webp",
-        ROOT/"assets"/"logo.jpg",
-        ROOT/"assets"/"logo.svg",
-    ]
-    return next((p for p in candidates if p.exists()), None)
-
 def brand_logo(sidebar=False, login=False):
-    logo = _logo_path()
-    if not logo:
-        return
-    # Crucial: never enlarge the raster logo, which was the cause of blur.
-    if login:
-        st.image(str(logo), width=245)
-    elif sidebar:
-        st.image(str(logo), width=225)
-    else:
-        st.image(str(logo), width=225)
+    logo = ROOT / "assets" / "logo.png"
+    if logo.exists():
+        if login:
+            st.image(str(logo), width=285)
+        elif sidebar:
+            st.image(str(logo), width=235)
+        else:
+            st.image(str(logo), width=230)
 
 def header(title: str, subtitle: str):
-    # No duplicated logo here: the brand already lives in the sidebar.
     st.markdown(
         f'<div class="da-kicker">PRÉ-VIABILIDADE URBANÍSTICA · V4.2 PLUS</div>'
         f'<div class="da-title">{title}</div>'
@@ -224,10 +186,37 @@ def steps(current: int):
         c.markdown(f'<div class="{cls}">{label}</div>', unsafe_allow_html=True)
     st.write("")
 
+def _plain(value: str) -> str:
+    if not value:
+        return "—"
+    s = value
+    # Strip markdown / LaTeX fragments that must never leak into cards.
+    s = re.sub(r'\$+', '', s)
+    s = re.sub(r'\\text\{([^}]*)\}', r'\1', s)
+    s = re.sub(r'\\mathrm\{([^}]*)\}', r'\1', s)
+    s = re.sub(r'\\(?:,|;|!|quad|qquad)', ' ', s)
+    s = s.replace(r'\%', '%').replace(r'\_', '_')
+    s = re.sub(r'\^\{([^}]*)\}', r'\1', s)
+    s = re.sub(r'_\{([^}]*)\}', r'\1', s)
+    s = re.sub(r'\[([0-9]+)\]', r'[\1]', s)
+    s = re.sub(r'[*#`]', '', s)
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+def compact_value(value: str, max_chars: int = 72) -> str:
+    s = _plain(value)
+    # Cards are executive; references belong in the detailed report.
+    s = re.sub(r'\s*\[[0-9]+\]', '', s).strip()
+    if len(s) > max_chars:
+        s = s[:max_chars-1].rstrip(" ,;:-") + "…"
+    return s or "—"
+
 def metric_card(label: str, value: str, note: str = ""):
+    value = compact_value(value)
     st.markdown(
         f'<div class="da-card"><div class="da-card-label">{label}</div>'
-        f'<div class="da-card-value">{value}</div><div class="da-card-note">{note}</div></div>',
+        f'<div class="da-card-value">{value}</div>'
+        f'<div class="da-card-note">{note}</div></div>',
         unsafe_allow_html=True
     )
 
@@ -235,9 +224,31 @@ def extract_highlight(patterns: list[str], text: str, fallback: str = "—") -> 
     for p in patterns:
         m = re.search(p, text, flags=re.I | re.M)
         if m:
-            value = m.group(1).strip()
-            value = re.sub(r"[*#`]", "", value)
-            return value[:120]
+            return _plain(m.group(1).strip())
+    return fallback
+
+def extract_label(text: str, labels: list[str], fallback: str = "—") -> str:
+    """Flexible extraction from Markdown labels, with one-line or next-line values."""
+    lines = text.splitlines()
+    clean_labels = [x.upper().strip(": ") for x in labels]
+    for i, raw in enumerate(lines):
+        line = re.sub(r'[*#`]', '', raw).strip()
+        upper = line.upper()
+        for lab in clean_labels:
+            if upper.startswith(lab + ":"):
+                val = line.split(":", 1)[1].strip()
+                if val:
+                    return _plain(val)
+                # first meaningful following line
+                for nxt in lines[i+1:i+4]:
+                    v = re.sub(r'[*#`>-]', '', nxt).strip()
+                    if v:
+                        return _plain(v)
+            if upper == lab:
+                for nxt in lines[i+1:i+4]:
+                    v = re.sub(r'[*#`>-]', '', nxt).strip()
+                    if v:
+                        return _plain(v)
     return fallback
 
 def source_cards(sources):

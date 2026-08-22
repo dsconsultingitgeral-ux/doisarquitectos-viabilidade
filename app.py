@@ -6,10 +6,10 @@ from src.state import init_state, go
 from src.prompt_loader import build_prompt
 from src.gemini_engine import run_full_analysis
 from src.report import build_pdf
-from src.ui import inject_css, header, steps, metric_card, extract_highlight, source_cards, brand_logo
+from src.ui import inject_css, header, steps, metric_card, extract_highlight, extract_label, source_cards, brand_logo
 from src.location import geocode_location, reverse_geocode, inferred_fields
 import folium
-from folium.plugins import Fullscreen
+from folium.plugins import Fullscreen, Draw
 from streamlit_folium import st_folium
 
 st.set_page_config(
@@ -46,27 +46,35 @@ steps(step)
 if step == 1:
     header(
         "Localizar o terreno",
-        "Pesquise pela morada ou clique diretamente no mapa. A localização é o ponto de partida; a análise técnica confirma depois o que é realmente aplicável à parcela."
+        "Pesquise pela morada, clique diretamente no mapa ou desenhe o perímetro aproximado do terreno."
     )
 
     st.markdown("""
     <div class="da-hero">
       <div class="big">Onde fica o terreno?</div>
       <div class="small">
-        Pode começar apenas com uma rua, morada, localidade ou coordenadas.
-        Se não tiver documentos, a aplicação continua e produz uma pré-análise com base nas fontes oficiais disponíveis.
+        Comece por uma rua, morada, localidade ou coordenadas. Também pode clicar no mapa
+        para identificar automaticamente o local e desenhar um polígono aproximado da parcela.
+        Sem documentos, a aplicação continua e produz uma pré-análise com base nas fontes oficiais disponíveis.
       </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # --- Search strip
+    # IMPORTANT: apply pending values BEFORE the widget is instantiated.
+    pending_search = st.session_state.pop("_pending_location_search", None)
+    if pending_search is not None:
+        st.session_state["location_search_v43"] = pending_search
+
+    if "location_search_v43" not in st.session_state:
+        st.session_state["location_search_v43"] = st.session_state.location or ""
+
+    # --- Pesquisa
     search_col, action_col = st.columns([5, 1.35], gap="small")
     with search_col:
         query = st.text_input(
             "Pesquisar localização",
-            value=st.session_state.location,
-            placeholder="Ex.: Alameda Silva Rocha, Aveiro",
-            key="location_search_v43"
+            key="location_search_v43",
+            placeholder="Ex.: Alameda Silva Rocha, Aveiro"
         )
     with action_col:
         st.write("")
@@ -91,25 +99,29 @@ if step == 1:
                     st.session_state.municipality = inf["municipality"]
                     st.session_state.parish = inf["parish"]
                     st.session_state.locality = inf["locality"]
-                    st.session_state["municipality_v43"] = inf["municipality"]
-                    st.session_state["parish_v43"] = inf["parish"]
-                    st.session_state["locality_v43"] = inf["locality"]
-                    st.session_state["location_search_v43"] = query.strip()
+
+                    # Synchronize text widgets only on the NEXT run.
+                    st.session_state["_pending_municipality"] = inf["municipality"]
+                    st.session_state["_pending_parish"] = inf["parish"]
+                    st.session_state["_pending_locality"] = inf["locality"]
                     st.session_state["last_map_click"] = None
                     st.rerun()
                 else:
-                    st.warning("Não encontrei uma localização inequívoca. Pode clicar diretamente no mapa.")
+                    st.warning("Não encontrei uma localização inequívoca. Clique diretamente no mapa.")
             except Exception as exc:
                 st.warning("Não foi possível concluir a pesquisa de localização.")
                 st.caption(str(exc))
 
-    # --- Map: ALWAYS visible, even before searching.
+    # --- Mapa sempre visível
     lat = st.session_state.geo_lat if st.session_state.geo_lat is not None else 40.2056
     lon = st.session_state.geo_lon if st.session_state.geo_lon is not None else -8.4196
     zoom = 17 if st.session_state.geo_lat is not None else 7
 
     st.markdown("### Mapa")
-    st.caption("Pesquise acima ou clique diretamente no local do terreno. O clique tenta identificar automaticamente a rua e a localização.")
+    st.caption(
+        "Clique num ponto para obter a rua/localização. "
+        "Use a ferramenta de desenho no canto do mapa para marcar o perímetro aproximado do terreno."
+    )
 
     fmap = folium.Map(
         location=[lat, lon],
@@ -118,6 +130,27 @@ if step == 1:
         tiles="OpenStreetMap",
     )
     Fullscreen(position="topright", title="Ecrã inteiro", title_cancel="Sair").add_to(fmap)
+
+    # Drawing tools: polygon and rectangle are enough for an approximate parcel.
+    Draw(
+        export=False,
+        position="topleft",
+        draw_options={
+            "polyline": False,
+            "polygon": {
+                "allowIntersection": False,
+                "showArea": True,
+                "shapeOptions": {"color": "#1C2638", "weight": 3, "fillOpacity": 0.10},
+            },
+            "rectangle": {
+                "shapeOptions": {"color": "#1C2638", "weight": 3, "fillOpacity": 0.10},
+            },
+            "circle": False,
+            "marker": False,
+            "circlemarker": False,
+        },
+        edit_options={"edit": True, "remove": True},
+    ).add_to(fmap)
 
     if st.session_state.geo_lat is not None and st.session_state.geo_lon is not None:
         folium.Marker(
@@ -129,12 +162,13 @@ if step == 1:
     map_data = st_folium(
         fmap,
         width=None,
-        height=430,
-        returned_objects=["last_clicked"],
+        height=470,
+        returned_objects=["last_clicked", "all_drawings"],
         use_container_width=True,
-        key="terrain_map_v43",
+        key="terrain_map_v44",
     )
 
+    # --- Clique no mapa -> reverse geocoding
     clicked = (map_data or {}).get("last_clicked")
     if clicked:
         click_key = f'{clicked.get("lat", 0):.6f},{clicked.get("lng", 0):.6f}'
@@ -153,14 +187,35 @@ if step == 1:
                     st.session_state.municipality = inf["municipality"]
                     st.session_state.parish = inf["parish"]
                     st.session_state.locality = inf["locality"]
-                    st.session_state["location_search_v43"] = inf["concise"]
-                    st.session_state["municipality_v43"] = inf["municipality"]
-                    st.session_state["parish_v43"] = inf["parish"]
-                    st.session_state["locality_v43"] = inf["locality"]
+
+                    # Safe widget updates on next run.
+                    st.session_state["_pending_location_search"] = inf["concise"]
+                    st.session_state["_pending_municipality"] = inf["municipality"]
+                    st.session_state["_pending_parish"] = inf["parish"]
+                    st.session_state["_pending_locality"] = inf["locality"]
                     st.rerun()
             except Exception as exc:
-                st.warning("O ponto ficou marcado, mas não foi possível obter automaticamente a morada.")
+                st.warning("O ponto foi selecionado, mas não foi possível obter automaticamente a morada.")
                 st.caption(str(exc))
+
+    # --- Drawing / polygon capture
+    drawings = (map_data or {}).get("all_drawings") or []
+    polygon_coords = []
+    if drawings:
+        # Use the most recent polygon/rectangle.
+        geom = drawings[-1].get("geometry", {})
+        gtype = geom.get("type")
+        coords = geom.get("coordinates", [])
+        if gtype == "Polygon" and coords:
+            polygon_coords = coords[0]
+            st.session_state["parcel_polygon_geojson"] = geom
+            st.session_state["parcel_polygon_coords"] = polygon_coords
+
+    if polygon_coords:
+        st.success(
+            f"Perímetro aproximado desenhado com {max(len(polygon_coords)-1, 0)} vértices. "
+            "Será tratado apenas como referência gráfica, não como limite cadastral confirmado."
+        )
 
     if st.session_state.geo_lat is not None and st.session_state.geo_lon is not None:
         st.markdown(
@@ -176,56 +231,69 @@ if step == 1:
             unsafe_allow_html=True
         )
 
-    # --- Details: clean, secondary to the map
+    # Apply pending values BEFORE each widget creation.
+    for pending_key, widget_key in [
+        ("_pending_municipality", "municipality_v43"),
+        ("_pending_parish", "parish_v43"),
+        ("_pending_locality", "locality_v43"),
+    ]:
+        pending_value = st.session_state.pop(pending_key, None)
+        if pending_value is not None:
+            st.session_state[widget_key] = pending_value
+
+    if "municipality_v43" not in st.session_state:
+        st.session_state["municipality_v43"] = st.session_state.municipality or ""
+    if "parish_v43" not in st.session_state:
+        st.session_state["parish_v43"] = st.session_state.parish or ""
+    if "locality_v43" not in st.session_state:
+        st.session_state["locality_v43"] = st.session_state.locality or ""
+
     st.write("")
     st.markdown("### Dados do terreno")
     d1, d2, d3 = st.columns(3, gap="small")
     with d1:
-        st.session_state.municipality = st.text_input(
-            "Município",
-            value=st.session_state.municipality,
-            key="municipality_v43"
-        )
+        municipality_value = st.text_input("Município", key="municipality_v43")
+        st.session_state.municipality = municipality_value
     with d2:
-        st.session_state.parish = st.text_input(
-            "Freguesia",
-            value=st.session_state.parish,
-            key="parish_v43"
-        )
+        parish_value = st.text_input("Freguesia", key="parish_v43")
+        st.session_state.parish = parish_value
     with d3:
-        st.session_state.locality = st.text_input(
-            "Localidade",
-            value=st.session_state.locality,
-            key="locality_v43"
-        )
+        locality_value = st.text_input("Localidade", key="locality_v43")
+        st.session_state.locality = locality_value
+
+    if "article_v43" not in st.session_state:
+        st.session_state["article_v43"] = st.session_state.article or ""
+    if "known_area_v43" not in st.session_state:
+        st.session_state["known_area_v43"] = st.session_state.known_area or ""
 
     d4, d5 = st.columns(2, gap="small")
     with d4:
-        st.session_state.article = st.text_input(
-            "Artigo matricial, se conhecido",
-            value=st.session_state.article,
-            key="article_v43"
-        )
+        article_value = st.text_input("Artigo matricial, se conhecido", key="article_v43")
+        st.session_state.article = article_value
     with d5:
-        st.session_state.known_area = st.text_input(
+        known_area_value = st.text_input(
             "Área conhecida, se disponível",
-            value=st.session_state.known_area,
             placeholder="Ex.: 2.974 m²",
             key="known_area_v43"
         )
+        st.session_state.known_area = known_area_value
 
     st.markdown("""
     <div class="da-status-warn" style="margin-top:8px">
-      <b>Nota técnica.</b> O ponto do mapa confirma a localização aproximada, não os limites cadastrais.
-      Área, geometria da parcela e incidências exatas só são dadas como confirmadas quando suportadas por documento, cadastro, polígono ou fonte oficial.
+      <b>Nota técnica.</b> O ponto e o perímetro desenhado no mapa são referências de localização.
+      Área jurídica, limites cadastrais e incidências exatas só são dadas como confirmadas quando suportadas
+      por documento, cadastro, polígono oficial ou outra fonte competente.
     </div>
     """, unsafe_allow_html=True)
 
-    st.session_state.location_confirmed = st.checkbox(
+    if "location_confirmed_v43" not in st.session_state:
+        st.session_state["location_confirmed_v43"] = st.session_state.location_confirmed
+
+    confirmed = st.checkbox(
         "Confirmo que esta é a localização do terreno que pretendo analisar.",
-        value=st.session_state.location_confirmed,
         key="location_confirmed_v43"
     )
+    st.session_state.location_confirmed = confirmed
 
     if st.button("Continuar para documentos →", type="primary", use_container_width=True):
         if not st.session_state.location.strip() and st.session_state.geo_lat is None:
@@ -360,31 +428,17 @@ elif step == 3:
             has_documents=bool(st.session_state.uploaded_files),
         )
 
-        stages = [
-            "A analisar documentos e desenhos…",
-            "A cruzar localização, área e identificação predial…",
-            "A pesquisar PDM e fontes oficiais…",
-            "A verificar REN, RAN, riscos e servidões…",
-            "A extrair regras quantitativas…",
-            "A calcular cenários e potencial…",
-            "A organizar referências [1], [2], [3] e links…",
-        ]
-        status = st.status("Estudo em execução…", expanded=True)
-        for s in stages:
-            status.write(s)
-
         try:
-            analysis, sources, response_id = run_full_analysis(prompt, st.session_state.uploaded_files)
+            with st.spinner("A analisar documentos, consultar fontes oficiais e calcular o potencial do terreno…"):
+                analysis, sources, response_id = run_full_analysis(prompt, st.session_state.uploaded_files)
             st.session_state.analysis_text = analysis
             st.session_state.analysis_sources = sources
             st.session_state.response_id = response_id
-            status.update(label="Análise concluída.", state="complete", expanded=False)
-            st.success("Estudo concluído. A abrir o resultado executivo…")
             go(4)
         except Exception as exc:
-            status.update(label="Não foi possível concluir a análise.", state="error")
+            st.error("Não foi possível concluir a análise.")
             st.exception(exc)
-            st.info("Verifica a GEMINI_API_KEY em Settings > Secrets do Streamlit Cloud.")
+            st.info("Verifica a GEMINI_API_KEY e o modelo configurado nos Secrets privados do Streamlit.")
 
 # ------------------------------------------------------------
 # 04 — POTENCIAL / RELATÓRIO
@@ -399,47 +453,47 @@ elif step == 4:
             go(3)
         st.stop()
 
-    # Best-effort extraction for headline cards. The complete report remains authoritative.
+    # Executive extraction for clean cards. The complete report remains authoritative.
     viability = extract_highlight([
         r"(🟢\s*VIABILIDADE PRELIMINAR FAVORÁVEL(?: COM CONDICIONANTES)?)",
         r"(🟡\s*VIABILIDADE PRELIMINAR FAVORÁVEL COM CONDICIONANTES)",
         r"(🟠\s*VIABILIDADE AINDA INDETERMINADA)",
         r"(🔴\s*VIABILIDADE PRELIMINAR DESFAVORÁVEL)",
-    ], text, "RESULTADO DISPONÍVEL")
+    ], text, "ANÁLISE CONCLUÍDA")
 
-    area = extract_highlight([
-        r"ÁREA CONSIDERADA:\s*\n?\s*([^\n]+)",
-        r"\*\*ÁREA CONSIDERADA:\*\*\s*([^\n]+)",
-    ], text)
-    classification = extract_highlight([
-        r"CLASSIFICAÇÃO:\s*\n?\s*([^\n]+)",
-        r"\*\*CLASSIFICAÇÃO:\*\*\s*([^\n]+)",
-    ], text)
-    use = extract_highlight([
-        r"USO MAIS INTERESSANTE:\s*\n?\s*([^\n]+)",
-        r"\*\*USO MAIS INTERESSANTE:\*\*\s*([^\n]+)",
-    ], text)
-    floors = extract_highlight([
-        r"PISOS:\s*\n?\s*([^\n]+)",
-        r"\*\*PISOS:\*\*\s*([^\n]+)",
-    ], text)
-    confidence = extract_highlight([
-        r"CONFIANÇA GLOBAL:\s*\n?\s*([^\n]+)",
-        r"\*\*CONFIANÇA GLOBAL:\*\*\s*([^\n]+)",
-    ], text)
+    area = extract_label(text, ["ÁREA CONSIDERADA", "ÁREA"], "—")
+    classification = extract_label(text, ["CLASSIFICAÇÃO", "CATEGORIA"], "—")
+    use = extract_label(text, ["USO MAIS INTERESSANTE", "USO RECOMENDADO"], "—")
+    implantation = extract_label(text, ["IMPLANTAÇÃO MÁXIMA", "IMPLANTAÇÃO"], "—")
+    floors = extract_label(text, ["PISOS"], "—")
+    confidence = extract_label(text, ["CONFIANÇA GLOBAL", "CONFIANÇA"], "—")
 
-    st.markdown(f'<div class="da-status-good"><b style="font-size:20px">{viability}</b><br><span style="color:#4B5563">Conclusão preliminar produzida pelo motor técnico V4.2 Plus.</span></div>', unsafe_allow_html=True)
+    status_class = "da-status-good"
+    if "DESFAVORÁVEL" in viability.upper():
+        status_class = "da-status-bad"
+    elif "INDETERMINADA" in viability.upper() or "CONDICIONANTES" in viability.upper():
+        status_class = "da-status-warn"
+
+    st.markdown(
+        f'<div class="{status_class}"><b style="font-size:19px">{viability}</b>'
+        '<br><span style="color:#667085">Síntese preliminar. A fundamentação e as referências estão disponíveis abaixo.</span></div>',
+        unsafe_allow_html=True
+    )
     st.write("")
 
-    cols = st.columns(5)
-    with cols[0]: metric_card("Área", area, "ver conflitos no relatório")
-    with cols[1]: metric_card("Classificação", classification, "PDM / cartografia")
-    with cols[2]: metric_card("Uso recomendado", use, "potencial principal")
-    with cols[3]: metric_card("Pisos", floors, "quando determinado")
-    with cols[4]: metric_card("Confiança", confidence, "evidência global")
+    row1 = st.columns(3, gap="small")
+    with row1[0]: metric_card("Área", area, "área considerada")
+    with row1[1]: metric_card("Classificação", classification, "PDM / cartografia")
+    with row1[2]: metric_card("Uso recomendado", use, "cenário principal")
 
     st.write("")
-    tabs = st.tabs(["Resumo executivo", "Análise técnica completa", "Fontes e links", "Relatório PDF"])
+    row2 = st.columns(3, gap="small")
+    with row2[0]: metric_card("Implantação", implantation, "quando determinada")
+    with row2[1]: metric_card("Pisos", floors, "limite / cenário")
+    with row2[2]: metric_card("Confiança", confidence, "evidência global")
+
+    st.write("")
+    tabs = st.tabs(["Síntese", "Análise técnica", "Fontes", "Relatório PDF"])
 
     with tabs[0]:
         # Show the conclusion section when possible; otherwise show the first part.
