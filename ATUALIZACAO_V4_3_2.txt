@@ -1,0 +1,9 @@
+V4.3.2 FINAL CANDIDATE — hotfix de robustez
+
+- Corrige incompatibilidade 3/4 valores no retorno de run_full_analysis.
+- Mantém compatibilidade com instâncias Streamlit que ainda tenham o motor anterior em cache durante redeploy.
+- Preserva integralmente design, navegação, mapa, login, relatório e prompts da V4.3.1.
+- Mantém extração estruturada dos cartões do Módulo 04 com fallback seguro.
+- Não altera Secrets nem credenciais.
+
+Recomendação de deploy: substituir TODO o conteúdo do repositório pelos ficheiros deste ZIP e fazer reboot/redeploy da app no Streamlit Cloud.

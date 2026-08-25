@@ -586,14 +586,33 @@ elif step == 3:
 
         try:
             with st.spinner("A analisar o terreno e consultar fontes oficiais…"):
-                analysis, sources, response_id, summary = run_full_analysis(
+                result = run_full_analysis(
                     prompt,
                     st.session_state.uploaded_files
                 )
-            st.session_state.analysis_text = analysis
+
+                # Compatibilidade defensiva entre versões do motor.
+                # V4.3+ devolve 4 valores (incluindo o resumo estruturado).
+                # Uma instância Streamlit que ainda tenha o módulo anterior em cache
+                # pode devolver 3; nesse caso a análise continua e os cartões usam
+                # o parser de fallback, sem derrubar a aplicação.
+                if not isinstance(result, (tuple, list)):
+                    raise RuntimeError("Resposta inesperada do motor de análise.")
+
+                if len(result) == 4:
+                    analysis, sources, response_id, summary = result
+                elif len(result) == 3:
+                    analysis, sources, response_id = result
+                    summary = {}
+                else:
+                    raise RuntimeError(
+                        f"Resposta incompatível do motor de análise ({len(result)} elementos)."
+                    )
+
+            st.session_state.analysis_text = analysis or ""
             st.session_state.analysis_summary = summary or {}
-            st.session_state.analysis_sources = sources
-            st.session_state.response_id = response_id
+            st.session_state.analysis_sources = sources or []
+            st.session_state.response_id = response_id or ""
             go(4)
         except Exception as exc:
             st.error("Não foi possível concluir a análise.")
