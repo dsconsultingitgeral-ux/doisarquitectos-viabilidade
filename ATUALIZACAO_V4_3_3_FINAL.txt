@@ -1,0 +1,12 @@
+V4.3.3 FINAL DE VALIDAÇÃO — 25/08/2026
+
+- Mantém integralmente o design, login, mapa e fluxo de 4 módulos.
+- Mantém análise documental, pesquisa oficial, fontes, PDF e cartões executivos.
+- Introduz análise em 2 passos: geração técnica + revisão sénior independente.
+- Introduz reparação automática apenas se persistirem falhas críticas conhecidas.
+- Habitação multifamiliar é obrigatoriamente avaliada em todos os estudos.
+- Uso condicionado/a validar não é eliminado do cenário máximo sem proibição expressa.
+- Proibida qualquer simulação com terreno hipotético quando a área real é desconhecida.
+- Proibidos tetos artificiais de fogos sem base calculável.
+- Cenários obrigatórios: A conservador, B equilibrado, C máximo potencial defensável.
+- Compatibilidade defensiva com retorno do motor e fallback dos cartões mantidos.

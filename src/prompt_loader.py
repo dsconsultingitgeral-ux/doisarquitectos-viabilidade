@@ -58,4 +58,16 @@ Nesse caso:
 A informação contida nos documentos anexados tem prioridade para confirmar, corrigir ou colocar em conflito estes dados.
 ============================================================
 """
-    return master.rstrip() + "\n\n" + context.strip() + "\n\n" + reliability.rstrip() + "\n\n" + addendum.rstrip() + "\n"
+    hard_final = r"""
+============================================================
+REGRAS FINAIS DE EXECUÇÃO — ÚLTIMA PRIORIDADE
+============================================================
+1. Avalia SEMPRE Habitação Multifamiliar na matriz de usos. Nunca a omitas.
+2. Se a multifamiliar não estiver expressamente proibida por norma diretamente aplicável, não a elimines por simples prudência; considera-a no cenário de máximo potencial quando puder representar maior aproveitamento, assinalando PIP/validação quando necessário.
+3. Se a área real da parcela não estiver comprovada, é PROIBIDO criar qualquer área hipotética/de referência para gerar m² absolutos. Usa somente fórmulas paramétricas.
+4. Não inventes número de fogos. Se faltar base: A CONFIRMAR.
+5. Os três cenários são sempre: A Conservador; B Equilibrado/Recomendado; C Máximo Potencial Tecnicamente Defensável.
+6. Antes de concluir, verifica coerência entre matriz de usos, cenários e conclusão.
+============================================================
+"""
+    return master.rstrip() + "\n\n" + context.strip() + "\n\n" + reliability.rstrip() + "\n\n" + addendum.rstrip() + "\n\n" + hard_final.strip() + "\n"

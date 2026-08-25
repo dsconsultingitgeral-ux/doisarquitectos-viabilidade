@@ -205,36 +205,105 @@ def build_executive_summary(analysis_text: str) -> dict:
         return {}
 
 
+def _load_quality_gate_prompt() -> str:
+    return (ROOT / "prompts" / "quality_gate_prompt.txt").read_text(encoding="utf-8")
+
+
+def _load_repair_prompt() -> str:
+    return (ROOT / "prompts" / "repair_prompt.txt").read_text(encoding="utf-8")
+
+
+def _quality_issues(text: str) -> list[str]:
+    """Cheap deterministic checks for the two failure modes found in real-case validation."""
+    t = (text or "").lower()
+    issues: list[str] = []
+
+    # Every final study must explicitly assess multifamily housing.
+    if "habitação multifamiliar" not in t and "habitacao multifamiliar" not in t:
+        issues.append("A matriz/relatório não avalia explicitamente Habitação Multifamiliar.")
+
+    # Never invent a reference parcel when the real area is unknown.
+    forbidden_area_phrases = [
+        "área hipotética", "area hipotetica", "lote hipotético", "lote hipotetico",
+        "parcela hipotética", "parcela hipotetica", "lote conceptual", "parcela tipo",
+        "terreno hipotético", "terreno hipotetico", "simulação teórica a 1.000",
+        "simulacao teorica a 1.000", "referência de 1.000 m", "referencia de 1.000 m",
+    ]
+    if any(x in t for x in forbidden_area_phrases):
+        issues.append("Foi criada uma área/lote hipotético para calcular valores absolutos.")
+
+    # Three scenarios are mandatory in the final report.
+    for code in ("cenário a", "cenário b", "cenário c"):
+        if code not in t and code.replace("á", "a") not in t:
+            issues.append(f"Falta {code.upper()} no relatório final.")
+
+    return issues
+
+
+def _generate_grounded(client: genai.Client, model: str, contents: list[Any], temperature: float = 0.08):
+    google_search = types.Tool(google_search=types.GoogleSearch())
+    return client.models.generate_content(
+        model=model,
+        contents=contents,
+        config=types.GenerateContentConfig(
+            tools=[google_search],
+            temperature=temperature,
+        ),
+    )
+
+
 def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
+    """Two-pass grounded analysis with an optional deterministic repair pass.
+
+    Pass 1 researches and drafts. Pass 2 independently reviews the draft against hard
+    quality rules using the same parcel documents and web grounding. A third pass only
+    runs when deterministic checks still detect a known critical failure.
+    """
     client = get_client()
+    model = get_model()
     gemini_files = upload_files(uploaded_files)
 
-    contents: list[Any] = [prompt]
-    contents.extend(gemini_files)
+    # PASS 1 — research + technical draft.
+    draft_contents: list[Any] = [prompt]
+    draft_contents.extend(gemini_files)
+    draft_response = _generate_grounded(client, model, draft_contents, temperature=0.10)
+    draft_text = getattr(draft_response, "text", "") or ""
 
-    google_search = types.Tool(
-        google_search=types.GoogleSearch()
-    )
+    # PASS 2 — final independent quality gate. It sees the same files and may search
+    # official sources again, so the final answer is not merely a stylistic rewrite.
+    review_prompt = _load_quality_gate_prompt()
+    review_contents: list[Any] = [
+        prompt,
+        review_prompt,
+        "\n\nRASCUNHO TÉCNICO A REVER E SUBSTITUIR:\n" + draft_text[:90000],
+    ]
+    review_contents.extend(gemini_files)
+    final_response = _generate_grounded(client, model, review_contents, temperature=0.05)
+    final_text = getattr(final_response, "text", "") or draft_text
 
-    config = types.GenerateContentConfig(
-        tools=[google_search],
-        temperature=0.12,
-    )
+    # PASS 3 — only if a known critical regression survives pass 2.
+    issues = _quality_issues(final_text)
+    if issues:
+        repair_contents: list[Any] = [
+            prompt,
+            _load_quality_gate_prompt(),
+            _load_repair_prompt(),
+            "\nFALHAS DETETADAS AUTOMATICAMENTE:\n- " + "\n- ".join(issues),
+            "\n\nRELATÓRIO A CORRIGIR:\n" + final_text[:90000],
+        ]
+        repair_contents.extend(gemini_files)
+        repaired = _generate_grounded(client, model, repair_contents, temperature=0.02)
+        repaired_text = getattr(repaired, "text", "") or ""
+        if repaired_text.strip():
+            final_response = repaired
+            final_text = repaired_text
 
-    response = client.models.generate_content(
-        model=get_model(),
-        contents=contents,
-        config=config,
-    )
-
-    text = getattr(response, "text", "") or ""
-    sources = _extract_grounding_sources(response)
-
+    sources = _extract_grounding_sources(final_response)
     response_id = (
-        getattr(response, "response_id", None)
-        or getattr(response, "id", None)
+        getattr(final_response, "response_id", None)
+        or getattr(final_response, "id", None)
         or ""
     )
 
-    summary = build_executive_summary(text)
-    return text, sources, str(response_id), summary
+    summary = build_executive_summary(final_text)
+    return final_text, sources, str(response_id), summary
