@@ -63,6 +63,35 @@ def safe_filename_part(value: str) -> str:
     return value[:60] or "Terreno"
 
 
+def clean_analysis_display(text: str) -> str:
+    """Remove visual separator artefacts without changing the technical report content."""
+    cleaned = []
+    for raw in (text or "").splitlines():
+        stripped = raw.strip()
+        if stripped and re.fullmatch(r"[=\-_]{8,}", stripped):
+            continue
+        cleaned.append(raw)
+    return "\n".join(cleaned).strip()
+
+
+def _card_value(summary: dict, key: str, fallback: str = "A confirmar") -> str:
+    value = (summary or {}).get(key)
+    if value is None:
+        return fallback
+    value = str(value).strip()
+    if not value or value in {"—", "-", "None", "null"}:
+        return fallback
+    return value
+
+
+def _clean_confidence(value: str) -> str:
+    value = str(value or "").strip()
+    m = re.search(r"(\d{1,3})\s*%", value)
+    if m:
+        return f"{min(100, int(m.group(1)))}%"
+    return "A confirmar"
+
+
 st.set_page_config(
     page_title="Viabilidade Urbanística · doisarquitetos",
     page_icon=Image.open(Path(__file__).resolve().parent / "assets" / "symbol.png"),
@@ -542,7 +571,7 @@ elif step == 3:
             st.stop()
 
         prompt = build_prompt(
-            location=st.session_state.location,
+            location=_card_value(summary, "validated_location", st.session_state.location),
             municipality=st.session_state.municipality,
             parish=st.session_state.parish,
             locality=st.session_state.locality,
@@ -557,11 +586,12 @@ elif step == 3:
 
         try:
             with st.spinner("A analisar o terreno e consultar fontes oficiais…"):
-                analysis, sources, response_id = run_full_analysis(
+                analysis, sources, response_id, summary = run_full_analysis(
                     prompt,
                     st.session_state.uploaded_files
                 )
             st.session_state.analysis_text = analysis
+            st.session_state.analysis_summary = summary or {}
             st.session_state.analysis_sources = sources
             st.session_state.response_id = response_id
             go(4)
@@ -583,20 +613,25 @@ elif step == 4:
             go(3)
         st.stop()
 
-    # Executive extraction for clean cards. The complete report remains authoritative.
-    viability = extract_highlight([
-        r"(🟢\s*VIABILIDADE PRELIMINAR FAVORÁVEL(?: COM CONDICIONANTES)?)",
-        r"(🟡\s*VIABILIDADE PRELIMINAR FAVORÁVEL COM CONDICIONANTES)",
-        r"(🟠\s*VIABILIDADE AINDA INDETERMINADA)",
-        r"(🔴\s*VIABILIDADE PRELIMINAR DESFAVORÁVEL)",
-    ], text, "ANÁLISE CONCLUÍDA")
+    # Executive cards use a dedicated structured extraction of the completed report.
+    # This avoids brittle best-effort parsing while keeping the full technical report authoritative.
+    summary = st.session_state.get("analysis_summary") or {}
 
-    area = extract_label(text, ["ÁREA CONSIDERADA", "ÁREA"], "—")
-    classification = extract_label(text, ["CLASSIFICAÇÃO", "CATEGORIA"], "—")
-    use = extract_label(text, ["USO MAIS INTERESSANTE", "USO RECOMENDADO"], "—")
-    implantation = extract_label(text, ["IMPLANTAÇÃO MÁXIMA", "IMPLANTAÇÃO"], "—")
-    floors = extract_label(text, ["PISOS"], "—")
-    confidence = extract_label(text, ["CONFIANÇA GLOBAL", "CONFIANÇA"], "—")
+    viability = _card_value(summary, "viability", "")
+    if not viability:
+        viability = extract_highlight([
+            r"(🟢\s*VIABILIDADE PRELIMINAR FAVORÁVEL(?: COM CONDICIONANTES)?)",
+            r"(🟡\s*VIABILIDADE PRELIMINAR FAVORÁVEL COM CONDICIONANTES)",
+            r"(🟠\s*VIABILIDADE AINDA INDETERMINADA)",
+            r"(🔴\s*VIABILIDADE PRELIMINAR DESFAVORÁVEL)",
+        ], text, "ANÁLISE CONCLUÍDA")
+
+    area = _card_value(summary, "area", extract_label(text, ["ÁREA IDENTIFICADA", "ÁREA CONSIDERADA", "ÁREA"], "A confirmar"))
+    classification = _card_value(summary, "classification", extract_label(text, ["CLASSIFICAÇÃO", "CATEGORIA / SUBCATEGORIA", "CATEGORIA"], "A confirmar"))
+    use = _card_value(summary, "recommended_use", extract_label(text, ["MELHOR APROVEITAMENTO", "USO MAIS INTERESSANTE", "USO RECOMENDADO"], "A confirmar"))
+    implantation = _card_value(summary, "implantation", extract_label(text, ["IMPLANTAÇÃO", "IMPLANTAÇÃO MÁXIMA"], "A confirmar"))
+    floors = _card_value(summary, "floors", extract_label(text, ["PISOS", "NÚMERO MÁXIMO DE PISOS"], "A confirmar"))
+    confidence = _clean_confidence(_card_value(summary, "confidence", extract_label(text, ["CONFIANÇA GLOBAL", "CONFIANÇA"], "A confirmar")))
 
     status_class = "da-status-good"
     if "DESFAVORÁVEL" in viability.upper():
@@ -626,7 +661,7 @@ elif step == 4:
     tabs = st.tabs(["Análise técnica", "Fontes", "Relatório PDF"])
 
     with tabs[0]:
-        st.markdown(text)
+        st.markdown(clean_analysis_display(text))
 
     with tabs[1]:
         st.markdown("### Fontes consultadas")
@@ -636,7 +671,7 @@ elif step == 4:
     with tabs[2]:
         pdf = build_pdf(
             title="Relatório de Viabilidade Urbanística",
-            location=st.session_state.location,
+            location=_card_value(summary, "validated_location", st.session_state.location),
             analysis_text=text,
             sources=st.session_state.analysis_sources,
         )

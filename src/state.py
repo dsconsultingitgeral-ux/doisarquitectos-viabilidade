@@ -18,6 +18,7 @@ DEFAULTS = {
     "parcel_polygon_coords": [],
     "uploaded_files": [],
     "analysis_text": "",
+    "analysis_summary": {},
     "analysis_sources": [],
     "response_id": "",
 }

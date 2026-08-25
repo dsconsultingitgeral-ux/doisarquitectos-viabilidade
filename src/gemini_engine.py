@@ -7,9 +7,13 @@ import os
 import tempfile
 import time
 import hashlib
+import json
+import re
 
 from google import genai
 from google.genai import types
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 @dataclass
@@ -38,9 +42,7 @@ def get_client() -> genai.Client:
 
 
 def get_model() -> str:
-    # Current Google AI documentation examples use Gemini 3.7 Flash.
-    # The cabinet can change this privately in Streamlit Secrets without
-    # changing the GitHub repository.
+    # Mantém o modelo configurável nos Secrets, sem expor chaves ou configuração privada no GitHub.
     return _secret("GEMINI_MODEL", "gemini-3.7-flash")
 
 
@@ -63,19 +65,13 @@ def _wait_until_ready(client: genai.Client, uploaded, timeout_seconds: int = 90)
         try:
             current = client.files.get(name=current.name)
         except Exception:
-            # Some file types can be usable immediately even if state polling
-            # is not exposed consistently.
             return current
 
     return current
 
 
 def upload_files(files: Iterable[Any]) -> list[Any]:
-    """Upload Streamlit files to Gemini Files API.
-
-    Gemini temporarily stores uploaded files. The app creates a temporary
-    local copy only for the duration of the upload and deletes it immediately.
-    """
+    """Upload Streamlit files to Gemini Files API with a session cache."""
     client = get_client()
     uploaded_files = []
 
@@ -155,6 +151,60 @@ def _extract_grounding_sources(response) -> list[SourceLink]:
     return found
 
 
+def _safe_json(text: str) -> dict:
+    text = (text or "").strip()
+    if not text:
+        return {}
+    try:
+        value = json.loads(text)
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        pass
+
+    # Defensive fallback for models that wrap JSON in a fenced block.
+    match = re.search(r"\{.*\}", text, flags=re.S)
+    if not match:
+        return {}
+    try:
+        value = json.loads(match.group(0))
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        return {}
+
+
+def _load_executive_summary_prompt() -> str:
+    path = ROOT / "prompts" / "executive_summary_prompt.txt"
+    return path.read_text(encoding="utf-8")
+
+
+def build_executive_summary(analysis_text: str) -> dict:
+    """Create a small structured view model for the Module 4 cards.
+
+    This call is deliberately NOT grounded and receives only the finished report.
+    It cannot introduce new urbanistic facts; it only reformats existing content.
+    """
+    if not (analysis_text or "").strip():
+        return {}
+
+    client = get_client()
+    prompt = _load_executive_summary_prompt()
+    contents = f"{prompt}\n\nRELATÓRIO A EXTRAIR:\n{analysis_text[:70000]}"
+
+    try:
+        response = client.models.generate_content(
+            model=get_model(),
+            contents=contents,
+            config=types.GenerateContentConfig(
+                temperature=0.0,
+                response_mime_type="application/json",
+            ),
+        )
+        return _safe_json(getattr(response, "text", "") or "")
+    except Exception:
+        # The application remains functional even if the secondary formatting call fails.
+        return {}
+
+
 def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
     client = get_client()
     gemini_files = upload_files(uploaded_files)
@@ -168,7 +218,7 @@ def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
 
     config = types.GenerateContentConfig(
         tools=[google_search],
-        temperature=0.2,
+        temperature=0.12,
     )
 
     response = client.models.generate_content(
@@ -186,4 +236,5 @@ def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
         or ""
     )
 
-    return text, sources, str(response_id)
+    summary = build_executive_summary(text)
+    return text, sources, str(response_id), summary

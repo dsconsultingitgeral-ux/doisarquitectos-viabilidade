@@ -1,135 +1,63 @@
-# doisarquitetos — Pré‑Viabilidade Urbanística V4.2 Plus Studio · Gemini
+# doisarquitectos — Estudo Inteligente de Viabilidade · V4.3 Final Candidate
 
-Aplicação Streamlit para **estudo preliminar de viabilidade urbanística de terrenos em Portugal**.
+Aplicação Streamlit com o mesmo desenho e o mesmo fluxo de 4 módulos já validado:
 
-## Fluxo
+1. **Localização** — morada, mapa, clique e polígono aproximado.
+2. **Documentos** — upload opcional de PDFs/imagens.
+3. **Análise IA** — análise técnica + pesquisa oficial.
+4. **Potencial** — decisão preliminar, cartões executivos, análise, fontes e PDF.
 
-**01 Localização → 02 Documentos → 03 Análise IA → 04 Potencial / Relatório**
+## O que foi melhorado nesta versão
 
-### 01 — Localização
+- O visual, mapa, login, navegação e funcionamento geral foram preservados.
+- O `master_prompt.txt` original continua integralmente disponível.
+- Foi acrescentado `prompts/reliability_addendum.txt` com regras de regressão derivadas dos testes reais: não inventar área, não tratar “condicionado” como “proibido”, explorar multifamiliar quando tecnicamente defensável, separar envelope teórico/capacidade/recomendação e testar o máximo potencial sem criar tetos artificiais.
+- Os cartões do Módulo 04 deixaram de depender apenas de parsing frágil do Markdown. Depois do relatório, a aplicação executa uma extração estruturada curta (`executive_summary_prompt.txt`) apenas para alimentar os cartões.
+- A confiança é normalizada para formato `NN%`.
+- Área/uso/classificação/implantação/pisos passam a mostrar `A confirmar` quando não existe valor seguro, em vez de `—` ou texto quebrado.
+- O cabeçalho do PDF usa, quando disponível, a localização final validada pelo próprio relatório.
+- Separadores visuais `=====`/`-----` deixam de aparecer como barras no ecrã e no PDF.
 
-- morada;
-- mapa;
-- coordenadas auxiliares;
-- município/freguesia/localidade;
-- artigo e área, quando conhecidos;
-- validação visual do local.
+## Prompts ativos
 
-A geocodificação é apenas uma ajuda de localização. **Nunca é utilizada para inventar a área ou os limites do prédio.**
+- `prompts/master_prompt.txt` — prompt técnico principal completo.
+- `prompts/reliability_addendum.txt` — regras finais de robustez e anti-subestimação.
+- `prompts/source_addendum.txt` — rastreabilidade, fontes e referências.
+- `prompts/executive_summary_prompt.txt` — extração estruturada dos 6 cartões do Módulo 04; não cria factos novos.
 
-### 02 — Documentos
+Ficheiros de prompts antigos que possam continuar no repositório GitHub (`scenario_prompt.py`, `synthesis_prompt.py`, etc.) **não são necessários nesta arquitetura** e podem ser apagados para evitar confusão. O motor ativo está em `src/gemini_engine.py`.
 
-Pode trabalhar:
+## Secrets do Streamlit
 
-- **Modo rápido:** apenas localização;
-- **Modo completo:** localização + documentos.
+Não guardar chaves no GitHub. Em **Streamlit → App settings → Secrets**, usar:
 
-Documentos podem incluir levantamento topográfico, plantas municipais, certidões, PIP, cadastro e outros elementos da parcela.
+```toml
+GEMINI_API_KEY = "..."
+GEMINI_MODEL = "gemini-3.7-flash"
 
-### 03 — Análise IA
-
-Motor: **Gemini API + Pesquisa Google**.
-
-A aplicação envia ao Gemini:
-
-- o **Master Prompt integral aprovado**;
-- os documentos anexados;
-- o contexto da localização;
-- regras adicionais obrigatórias de fontes e rastreabilidade.
-
-O ficheiro `prompts/master_prompt.txt` mantém o prompt técnico integral.
-
-### 04 — Potencial
-
-Apresenta primeiro a decisão:
-
-- viabilidade;
-- área considerada;
-- classificação;
-- categoria;
-- uso recomendado;
-- implantação;
-- construção;
-- pisos;
-- fogos indicativos;
-- condicionantes;
-- confiança.
-
-Depois:
-
-- Cenário A — Conservador;
-- Cenário B — Equilibrado;
-- Cenário C — Máximo potencial;
-- recomendação;
-- fundamentação técnica;
-- fontes;
-- links;
-- relatório PDF.
-
-## Fontes
-
-O Master Prompt exige referências do tipo:
-
-`[1]`, `[2]`, `[3]`...
-
-No final do estudo deve existir uma secção de referências e documentos analisados.
-
-Além disso, a interface recolhe os **links devolvidos pelo grounding da Pesquisa Google do Gemini** quando disponíveis.
-
-## Segurança
-
-Não existem credenciais por defeito no código.
-
-Não coloque credenciais no GitHub.
-
-Leia primeiro:
-
-- `DEPLOY_SEGURO.md`
-- `TESTE_HOJE.md`
-
-## Logo
-
-O projeto já inclui `assets/logo.png`, obtido do visual aprovado no teste.
-
-Se quiser substituir pelo ficheiro original de alta resolução, basta trocar:
-
-```text
-assets/logo.png
+[auth]
+username = "..."
+password = "..."
 ```
 
-A aplicação também aceita WEBP/JPG/SVG.
+Pode manter exatamente os Secrets que já estão configurados na aplicação atual.
 
-## API
+## Deploy
 
-SDK:
+O ficheiro principal continua a ser:
 
 ```text
-google-genai
+app.py
 ```
 
-Secrets privados utilizados:
+O `requirements.txt` mantém as dependências necessárias.
 
-- `GEMINI_API_KEY`
-- `GEMINI_MODEL`
-- `[auth].username`
-- `[auth].password`
+## Teste recomendado antes de enviar ao gabinete
 
-## Nota
+1. São Marcos / Albergaria-a-Velha — confirmar que multifamiliar não é eliminado quando condicionado/permitido e que o cenário máximo não cria um teto sem metodologia.
+2. Ílhavo — confirmar escala multifamiliar.
+3. Alameda Silva Rocha — confirmar conflito 2.974/3.055 m² e manutenção do bom resultado.
+4. Rua da Misericórdia / Águeda — confirmar potencial de pisos/volumetria sem transformar regra-base em teto absoluto.
+5. Rua dos Andoeiros / Aveiro — confirmar uso multifamiliar, pisos e aproveitamento da topografia.
 
-O resultado é um **estudo preliminar de apoio à decisão**. A aplicação deve distinguir sempre informação confirmada, provável, não determinada e em conflito, conforme definido no Master Prompt.
-
-
-## Revisão visual Studio
-
-Esta revisão corrige especificamente a experiência gráfica:
-
-- logo real mostrado sem ampliação artificial, para evitar desfocagem;
-- cabeçalho limpo, sem duplicação/corte do logótipo;
-- espaçamento superior corrigido para não cortar a navegação;
-- largura e tipografia ajustadas a um gabinete de arquitetura;
-- mapa sempre visível no Módulo 01;
-- pesquisa por morada;
-- **clique direto no mapa com reverse geocoding** para tentar preencher rua/localização;
-- coordenadas apresentadas após seleção;
-- Município, Freguesia e Localidade preenchidos automaticamente quando a geocodificação os disponibiliza;
-- mantém integralmente Documentos, Master Prompt, Gemini, fontes, potencial, cenários e PDF.
+Esta é uma versão de **protótipo para validação técnica**, não substitui PIP, decisão municipal ou validação do arquiteto.

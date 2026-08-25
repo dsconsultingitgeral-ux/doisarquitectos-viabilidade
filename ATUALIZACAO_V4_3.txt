@@ -1,0 +1,22 @@
+ATUALIZAÇÃO V4.3 FINAL CANDIDATE
+
+Objetivo: manter exatamente a experiência visual e o fluxo da versão de 4 módulos, corrigindo o motor e o Módulo 04.
+
+FICHEIROS PRINCIPAIS ALTERADOS:
+- app.py
+- src/gemini_engine.py
+- src/prompt_loader.py
+- src/state.py
+- src/report.py
+- prompts/reliability_addendum.txt (novo)
+- prompts/executive_summary_prompt.txt (novo)
+- README.md
+
+PROMPT PRINCIPAL:
+O master_prompt.txt original foi preservado. As regras novas entram por addendum para reduzir risco de regressão.
+
+CARTÕES DO MÓDULO 04:
+Agora são alimentados por uma extração JSON dedicada do relatório final. Se essa chamada falhar, a app usa o parsing antigo como fallback. Portanto a aplicação continua funcional e deixa de mostrar valores como “82%,,,,,”, parágrafos enormes ou “—” quando o relatório contém a informação.
+
+IMPORTANTE:
+Os antigos prompts Python (scenario_prompt.py, synthesis_prompt.py, research_prompt.py, etc.) não fazem parte do motor desta arquitetura de 4 módulos. Se existirem no GitHub, não são chamados por esta versão.

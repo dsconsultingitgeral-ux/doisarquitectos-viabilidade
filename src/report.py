@@ -29,6 +29,8 @@ def _fmt(s: str) -> str:
 def _parse(text: str):
     for raw in text.splitlines():
         line = raw.strip()
+        if line and re.fullmatch(r"[=\-_]{8,}", line):
+            continue
         if not line:
             yield ("space", "")
         elif line.startswith("### "):

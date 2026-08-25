@@ -8,9 +8,13 @@ def load_master_prompt() -> str:
 def load_source_addendum() -> str:
     return (ROOT / "prompts" / "source_addendum.txt").read_text(encoding="utf-8")
 
+def load_reliability_addendum() -> str:
+    return (ROOT / "prompts" / "reliability_addendum.txt").read_text(encoding="utf-8")
+
 def build_prompt(location: str, municipality: str = "", parish: str = "", locality: str = "", article: str = "", known_area: str = "", geo_lat=None, geo_lon=None, geo_display_name: str = "", has_documents: bool = False, parcel_polygon_coords=None) -> str:
     master = load_master_prompt()
     addendum = load_source_addendum()
+    reliability = load_reliability_addendum()
 
     # O master prompt fica integral e inalterado. Este bloco só informa ao motor
     # os dados do estudo atual e prevalece sobre o exemplo de caso de estudo
@@ -54,4 +58,4 @@ Nesse caso:
 A informação contida nos documentos anexados tem prioridade para confirmar, corrigir ou colocar em conflito estes dados.
 ============================================================
 """
-    return master.rstrip() + "\n\n" + context.strip() + "\n\n" + addendum.rstrip() + "\n"
+    return master.rstrip() + "\n\n" + context.strip() + "\n\n" + reliability.rstrip() + "\n\n" + addendum.rstrip() + "\n"
