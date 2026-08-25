@@ -1,0 +1,13 @@
+DOISARQUITECTOS — V4.3.1 FINAL CANDIDATE
+
+Correção de runtime:
+- Corrigido NameError ao iniciar a Análise IA no módulo 03.
+- A localização de entrada passa diretamente de st.session_state.location para build_prompt antes da análise.
+- A localização validada pela IA continua a ser usada posteriormente nos cartões/relatório, quando já existe analysis_summary.
+- Mantidos design, navegação, mapa, autenticação, prompts e funcionamento da V4.3.
+
+Instalação:
+1. Extrair este ZIP.
+2. Substituir os ficheiros do repositório pelos desta versão (ou, para o hotfix mínimo, substituir apenas app.py).
+3. Não alterar os Secrets do Streamlit.
+4. Aguardar o redeploy e repetir o teste de São Marcos.

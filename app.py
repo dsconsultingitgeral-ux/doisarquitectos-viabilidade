@@ -571,7 +571,7 @@ elif step == 3:
             st.stop()
 
         prompt = build_prompt(
-            location=_card_value(summary, "validated_location", st.session_state.location),
+            location=st.session_state.location,
             municipality=st.session_state.municipality,
             parish=st.session_state.parish,
             locality=st.session_state.locality,
