@@ -8,7 +8,7 @@ from PIL import Image
 from src.auth import login_required, logout_button
 from src.state import init_state, go
 from src.prompt_loader import build_prompt
-from src.gemini_engine import run_full_analysis, AIServiceTemporarilyUnavailable
+from src.gemini_engine import run_full_analysis
 from src.report import build_pdf
 from src.ui import inject_css, header, steps, metric_card, extract_highlight, source_cards, brand_logo
 from src.location import geocode_location, reverse_geocode, inferred_fields
@@ -634,19 +634,33 @@ elif step == 3:
             st.session_state.analysis_sources = sources or []
             st.session_state.response_id = response_id or ""
             go(4)
-        except AIServiceTemporarilyUnavailable as exc:
-            # Nunca expor traceback, paths internos, nomes de módulos ou detalhes da API ao cliente.
-            st.warning(str(exc))
-            st.info("Pode carregar novamente em **INICIAR ANÁLISE**. Não é necessário repetir a localização nem voltar a anexar os documentos.")
-        except Exception:
-            # Falhas técnicas são registadas apenas no servidor. A interface do cliente
-            # recebe uma mensagem neutra e segura, sem código interno ou credenciais.
+        except Exception as exc:
+            # IMPORTANT: app.py deliberately imports only run_full_analysis from the engine.
+            # This keeps deployment compatible even if Streamlit briefly serves a cached
+            # engine module during a GitHub redeploy. No custom exception import can break
+            # the whole application at startup.
             import logging
-            logging.getLogger(__name__).exception("Erro inesperado durante a análise urbanística")
-            st.error(
-                "Não foi possível concluir a análise neste momento. "
-                "Os dados introduzidos foram mantidos nesta sessão. Tente novamente dentro de alguns instantes."
-            )
+            logging.getLogger(__name__).exception("Erro durante a análise urbanística")
+
+            msg = f"{type(exc).__name__}: {exc}".lower()
+            temporary = any(token in msg for token in (
+                "429", "500", "502", "503", "504", "unavailable", "high demand",
+                "resource_exhausted", "deadline_exceeded", "timeout", "timed out",
+                "temporarily", "connection reset", "connection error",
+            ))
+            if temporary:
+                st.warning(
+                    "O serviço de inteligência artificial está temporariamente congestionado. "
+                    "A aplicação manteve todos os dados desta sessão. Tente novamente dentro de alguns instantes."
+                )
+                st.info(
+                    "Pode carregar novamente em **INICIAR ANÁLISE**; não precisa de repetir a localização nem voltar a anexar os documentos."
+                )
+            else:
+                st.error(
+                    "Não foi possível concluir a análise neste momento. "
+                    "Os dados introduzidos foram mantidos nesta sessão. Tente novamente dentro de alguns instantes."
+                )
 
 # ------------------------------------------------------------
 # 04 — POTENCIAL / RELATÓRIO
