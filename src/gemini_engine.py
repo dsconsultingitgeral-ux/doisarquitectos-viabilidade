@@ -9,6 +9,8 @@ import time
 import hashlib
 import json
 import re
+import random
+import logging
 
 from google import genai
 from google.genai import types
@@ -42,8 +44,59 @@ def get_client() -> genai.Client:
 
 
 def get_model() -> str:
-    # Mantém o modelo configurável nos Secrets, sem expor chaves ou configuração privada no GitHub.
+    # Mantém o modelo principal configurável nos Secrets, sem expor chaves no GitHub.
     return _secret("GEMINI_MODEL", "gemini-3.7-flash")
+
+
+def get_fallback_models() -> list[str]:
+    """Return an ordered, deduplicated model fallback chain.
+
+    GEMINI_FALLBACK_MODELS may contain comma-separated model names in Streamlit Secrets.
+    The conservative default keeps a broadly available Flash model as a safety net.
+    """
+    primary = get_model().strip()
+    raw = _secret("GEMINI_FALLBACK_MODELS", "gemini-2.5-flash")
+    models = [primary] + [m.strip() for m in raw.split(",") if m.strip()]
+    seen: set[str] = set()
+    out: list[str] = []
+    for model in models:
+        if model and model not in seen:
+            seen.add(model)
+            out.append(model)
+    return out
+
+
+class AIServiceTemporarilyUnavailable(RuntimeError):
+    """Raised only after retries/fallbacks for a temporary upstream failure are exhausted."""
+
+
+logger = logging.getLogger(__name__)
+
+
+def _is_retryable_error(exc: Exception) -> bool:
+    """Recognise transient Gemini/network failures without depending on one SDK exception class."""
+    text = f"{type(exc).__name__}: {exc}".lower()
+    transient_markers = (
+        "429", "500", "502", "503", "504",
+        "resource_exhausted", "unavailable", "deadline_exceeded",
+        "high demand", "temporarily", "timeout", "timed out",
+        "connection reset", "connection aborted", "connection error",
+        "service unavailable", "internal server error",
+    )
+    return any(marker in text for marker in transient_markers)
+
+
+def _friendly_upstream_message(exc: Exception) -> str:
+    if _is_retryable_error(exc):
+        return (
+            "O serviço de inteligência artificial está temporariamente congestionado. "
+            "A aplicação tentou novamente de forma automática, mas o serviço externo ainda não respondeu. "
+            "Tente novamente dentro de alguns instantes; os dados introduzidos permanecem nesta sessão."
+        )
+    return (
+        "Não foi possível concluir a análise neste momento. "
+        "Os dados introduzidos permanecem nesta sessão; tente novamente ou contacte o suporte se o problema persistir."
+    )
 
 
 def _wait_until_ready(client: genai.Client, uploaded, timeout_seconds: int = 90):
@@ -240,7 +293,7 @@ def _quality_issues(text: str) -> list[str]:
     return issues
 
 
-def _generate_grounded(client: genai.Client, model: str, contents: list[Any], temperature: float = 0.08):
+def _generate_grounded_once(client: genai.Client, model: str, contents: list[Any], temperature: float = 0.08):
     google_search = types.Tool(google_search=types.GoogleSearch())
     return client.models.generate_content(
         model=model,
@@ -250,6 +303,46 @@ def _generate_grounded(client: genai.Client, model: str, contents: list[Any], te
             temperature=temperature,
         ),
     )
+
+
+def _generate_grounded_resilient(
+    client: genai.Client,
+    contents: list[Any],
+    temperature: float = 0.08,
+    attempts_per_model: int = 3,
+):
+    """Generate with retry + exponential backoff + model fallback.
+
+    A 503/429/timeout must never immediately abort a client study. Each configured
+    model gets a few tries; only temporary failures move to the next model.
+    Permanent/configuration errors still fail fast, which avoids masking real setup issues.
+    """
+    last_exc: Exception | None = None
+
+    for model in get_fallback_models():
+        for attempt in range(1, attempts_per_model + 1):
+            try:
+                return _generate_grounded_once(client, model, contents, temperature)
+            except Exception as exc:
+                last_exc = exc
+                if not _is_retryable_error(exc):
+                    logger.exception("Gemini non-retryable error using model %s", model)
+                    raise
+
+                logger.warning(
+                    "Temporary Gemini error using model %s (attempt %s/%s): %s",
+                    model, attempt, attempts_per_model, exc,
+                )
+                if attempt < attempts_per_model:
+                    # 2s, 4s (+ small jitter) keeps us polite during demand spikes.
+                    delay = (2 ** attempt) + random.uniform(0.0, 0.75)
+                    time.sleep(delay)
+
+        # All attempts for this model failed temporarily; try the next configured fallback.
+
+    if last_exc is not None:
+        raise AIServiceTemporarilyUnavailable(_friendly_upstream_message(last_exc)) from last_exc
+    raise AIServiceTemporarilyUnavailable("O serviço de IA não está disponível neste momento.")
 
 
 def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
@@ -266,7 +359,7 @@ def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
     # PASS 1 — research + technical draft.
     draft_contents: list[Any] = [prompt]
     draft_contents.extend(gemini_files)
-    draft_response = _generate_grounded(client, model, draft_contents, temperature=0.10)
+    draft_response = _generate_grounded_resilient(client, draft_contents, temperature=0.10)
     draft_text = getattr(draft_response, "text", "") or ""
 
     # PASS 2 — final independent quality gate. It sees the same files and may search
@@ -278,8 +371,15 @@ def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
         "\n\nRASCUNHO TÉCNICO A REVER E SUBSTITUIR:\n" + draft_text[:90000],
     ]
     review_contents.extend(gemini_files)
-    final_response = _generate_grounded(client, model, review_contents, temperature=0.05)
-    final_text = getattr(final_response, "text", "") or draft_text
+    try:
+        final_response = _generate_grounded_resilient(client, review_contents, temperature=0.05)
+        final_text = getattr(final_response, "text", "") or draft_text
+    except AIServiceTemporarilyUnavailable:
+        # If the independent review is the only call affected by a temporary spike,
+        # preserve the already completed grounded draft instead of losing the study.
+        logger.warning("Quality-gate call unavailable; returning grounded draft safely.")
+        final_response = draft_response
+        final_text = draft_text
 
     # PASS 3 — only if a known critical regression survives pass 2.
     issues = _quality_issues(final_text)
@@ -292,11 +392,16 @@ def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
             "\n\nRELATÓRIO A CORRIGIR:\n" + final_text[:90000],
         ]
         repair_contents.extend(gemini_files)
-        repaired = _generate_grounded(client, model, repair_contents, temperature=0.02)
-        repaired_text = getattr(repaired, "text", "") or ""
-        if repaired_text.strip():
-            final_response = repaired
-            final_text = repaired_text
+        try:
+            repaired = _generate_grounded_resilient(client, repair_contents, temperature=0.02)
+            repaired_text = getattr(repaired, "text", "") or ""
+            if repaired_text.strip():
+                final_response = repaired
+                final_text = repaired_text
+        except AIServiceTemporarilyUnavailable:
+            # Repair is an enhancement pass. A temporary upstream failure must not
+            # destroy a usable final report that has already been produced.
+            logger.warning("Repair pass unavailable; keeping previous completed report.")
 
     sources = _extract_grounding_sources(final_response)
     response_id = (

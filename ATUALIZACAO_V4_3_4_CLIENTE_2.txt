@@ -1,0 +1,18 @@
+doisarquitectos — V4.3.4 | 2.º envio ao cliente
+
+Correções desta versão:
+- Mapa em vista Satélite por defeito (Esri World Imagery).
+- Alternância opcional para mapa de ruas.
+- Tratamento específico de indisponibilidade temporária Gemini (429/5xx/timeouts).
+- 3 tentativas automáticas por modelo, com espera progressiva.
+- Fallback de modelo configurável via GEMINI_FALLBACK_MODELS.
+- Se a revisão/repair falhar temporariamente, preserva a análise já produzida em vez de perder o estudo.
+- Nunca apresenta traceback, paths internos ou detalhes técnicos ao cliente.
+- Mantém localização, documentos e sessão depois de falhas temporárias.
+
+Secrets recomendados no Streamlit:
+GEMINI_API_KEY = "..."
+GEMINI_MODEL = "modelo principal já utilizado"
+GEMINI_FALLBACK_MODELS = "gemini-2.5-flash"
+
+Nota: GEMINI_FALLBACK_MODELS aceita vários nomes separados por vírgula.

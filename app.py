@@ -8,7 +8,7 @@ from PIL import Image
 from src.auth import login_required, logout_button
 from src.state import init_state, go
 from src.prompt_loader import build_prompt
-from src.gemini_engine import run_full_analysis
+from src.gemini_engine import run_full_analysis, AIServiceTemporarilyUnavailable
 from src.report import build_pdf
 from src.ui import inject_css, header, steps, metric_card, extract_highlight, source_cards, brand_logo
 from src.location import geocode_location, reverse_geocode, inferred_fields
@@ -231,12 +231,32 @@ if step == 1:
         label_visibility="collapsed",
     )
 
+    # Vista satélite por defeito, conforme feedback de utilização do gabinete.
+    # Mantemos cartografia de rua como alternativa de segurança/consulta.
     fmap = folium.Map(
         location=[lat, lon],
         zoom_start=zoom,
         control_scale=True,
-        tiles="OpenStreetMap",
+        tiles=None,
     )
+    folium.TileLayer(
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        attr="Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+        name="Satélite",
+        overlay=False,
+        control=True,
+        show=True,
+        max_zoom=20,
+    ).add_to(fmap)
+    folium.TileLayer(
+        tiles="OpenStreetMap",
+        attr="© OpenStreetMap contributors",
+        name="Mapa de ruas",
+        overlay=False,
+        control=True,
+        show=False,
+    ).add_to(fmap)
+    folium.LayerControl(position="topright", collapsed=True).add_to(fmap)
     Fullscreen(position="topright", title="Ecrã inteiro", title_cancel="Sair").add_to(fmap)
 
     # Re-show a previously saved parcel geometry after Streamlit reruns.
@@ -614,10 +634,19 @@ elif step == 3:
             st.session_state.analysis_sources = sources or []
             st.session_state.response_id = response_id or ""
             go(4)
-        except Exception as exc:
-            st.error("Não foi possível concluir a análise.")
-            st.exception(exc)
-            st.info("Verifica a configuração da API nos Secrets privados do Streamlit.")
+        except AIServiceTemporarilyUnavailable as exc:
+            # Nunca expor traceback, paths internos, nomes de módulos ou detalhes da API ao cliente.
+            st.warning(str(exc))
+            st.info("Pode carregar novamente em **INICIAR ANÁLISE**. Não é necessário repetir a localização nem voltar a anexar os documentos.")
+        except Exception:
+            # Falhas técnicas são registadas apenas no servidor. A interface do cliente
+            # recebe uma mensagem neutra e segura, sem código interno ou credenciais.
+            import logging
+            logging.getLogger(__name__).exception("Erro inesperado durante a análise urbanística")
+            st.error(
+                "Não foi possível concluir a análise neste momento. "
+                "Os dados introduzidos foram mantidos nesta sessão. Tente novamente dentro de alguns instantes."
+            )
 
 # ------------------------------------------------------------
 # 04 — POTENCIAL / RELATÓRIO
