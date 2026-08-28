@@ -1,0 +1,54 @@
+V4.3.6 — RESILIÊNCIA DE PRODUÇÃO — 28/08/2026
+
+OBJETIVO
+Evitar que uma indisponibilidade temporária de um único modelo Gemini impeça a análise.
+
+ALTERAÇÕES
+1. Cadeia automática de modelos GA atuais:
+   - modelo configurado em GEMINI_MODEL
+   - gemini-3.7-flash
+   - gemini-3.6-flash
+   - gemini-3.5-flash
+   - gemini-3.5-flash-lite
+   - gemini-3.1-flash-lite
+
+2. Modelos Gemini 2.x existentes em secrets antigos são ignorados automaticamente.
+   Isto evita o 404 observado com gemini-2.5-flash.
+
+3. Erro 503/429/5xx/timeout:
+   - retries automáticos
+   - backoff progressivo + jitter
+   - mudança automática para o modelo seguinte
+
+4. Erro 404/modelo retirado/não suportado:
+   - não termina a análise
+   - salta imediatamente para o modelo seguinte
+
+5. Upload de PDFs:
+   - 4 tentativas em falhas temporárias
+   - cache por hash do documento
+
+6. A análise completa mantém comportamento fail-safe:
+   - se o rascunho principal existir e a revisão final sofrer indisponibilidade temporária,
+     conserva o rascunho válido em vez de perder o estudo.
+   - o mesmo princípio aplica-se ao passe de reparação.
+
+7. O resumo executivo é secundário:
+   - tenta vários modelos
+   - se falhar, não derruba o relatório principal.
+
+8. Dependências fixadas nas versões observadas/testadas no Streamlit Cloud para reduzir
+   regressões provocadas por atualizações automáticas.
+
+9. Mantida a vista de satélite ArcGIS World Imagery pedida pelo cliente.
+
+SECRETS
+Não é necessário configurar GEMINI_FALLBACK_MODELS.
+Mesmo que ainda exista GEMINI_FALLBACK_MODELS="gemini-2.5-flash", a V4.3.6 ignora 2.x.
+Recomendado:
+GEMINI_MODEL = "gemini-3.7-flash"
+
+NOTA
+Nenhuma integração externa consegue garantir 100% de disponibilidade. Esta versão reduz
+fortemente o risco ao não depender de um único endpoint/modelo e ao preservar trabalho
+já concluído quando uma fase secundária falha.

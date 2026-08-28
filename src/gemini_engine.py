@@ -49,20 +49,38 @@ def get_model() -> str:
 
 
 def get_fallback_models() -> list[str]:
-    """Return an ordered, deduplicated model fallback chain.
+    """Build a production-safe fallback chain using current GA Gemini 3 models.
 
-    GEMINI_FALLBACK_MODELS may contain comma-separated model names in Streamlit Secrets.
-    The conservative default keeps a broadly available Flash model as a safety net.
+    The Streamlit secret GEMINI_MODEL is respected as the first preference, but the
+    application always keeps several stable fallbacks. Old Gemini 2.x model names are
+    deliberately ignored because they may return 404 for newer API users.
     """
     primary = get_model().strip()
-    raw = _secret("GEMINI_FALLBACK_MODELS", "gemini-2.5-flash")
-    models = [primary] + [m.strip() for m in raw.split(",") if m.strip()]
+    raw = _secret("GEMINI_FALLBACK_MODELS", "")
+
+    # Current stable text/multimodal production fallbacks (Aug 2026).
+    built_in = [
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+    ]
+
+    requested = [m.strip() for m in raw.split(",") if m.strip()]
+    models = [primary] + requested + built_in
+
     seen: set[str] = set()
     out: list[str] = []
     for model in models:
-        if model and model not in seen:
-            seen.add(model)
-            out.append(model)
+        if not model or model in seen:
+            continue
+        # Never let a stale 2.x secret break the whole chain.
+        if model.startswith("gemini-2."):
+            logger.warning("Ignoring retired/stale Gemini fallback model: %s", model)
+            continue
+        seen.add(model)
+        out.append(model)
     return out
 
 
@@ -84,6 +102,17 @@ def _is_retryable_error(exc: Exception) -> bool:
         "service unavailable", "internal server error",
     )
     return any(marker in text for marker in transient_markers)
+
+
+def _is_model_unavailable_error(exc: Exception) -> bool:
+    """Errors that mean 'skip this model and continue with the next one'."""
+    text = f"{type(exc).__name__}: {exc}".lower()
+    markers = (
+        "404", "not_found", "not found", "no longer available",
+        "model is not found", "model not found", "unsupported model",
+        "does not support", "not supported for this model",
+    )
+    return any(marker in text for marker in markers)
 
 
 def _friendly_upstream_message(exc: Exception) -> str:
@@ -124,7 +153,10 @@ def _wait_until_ready(client: genai.Client, uploaded, timeout_seconds: int = 90)
 
 
 def upload_files(files: Iterable[Any]) -> list[Any]:
-    """Upload Streamlit files to Gemini Files API with a session cache."""
+    """Upload Streamlit files to Gemini Files API with cache + retries.
+
+    A temporary upload/network failure must not abort a client study immediately.
+    """
     client = get_client()
     uploaded_files = []
 
@@ -155,10 +187,30 @@ def upload_files(files: Iterable[Any]) -> list[Any]:
                 tmp.write(raw)
                 temp_path = tmp.name
 
-            uploaded = client.files.upload(file=temp_path)
-            uploaded = _wait_until_ready(client, uploaded)
-            uploaded_files.append(uploaded)
+            last_exc: Exception | None = None
+            uploaded = None
+            for attempt in range(1, 5):
+                try:
+                    uploaded = client.files.upload(file=temp_path)
+                    uploaded = _wait_until_ready(client, uploaded, timeout_seconds=120)
+                    break
+                except Exception as exc:
+                    last_exc = exc
+                    if not _is_retryable_error(exc) or attempt == 4:
+                        raise
+                    delay = min(10.0, (1.7 ** attempt) + random.uniform(0.1, 0.8))
+                    logger.warning(
+                        "Temporary Gemini file-upload error (attempt %s/4): %s",
+                        attempt, exc,
+                    )
+                    time.sleep(delay)
 
+            if uploaded is None:
+                if last_exc:
+                    raise last_exc
+                raise RuntimeError("Não foi possível preparar o documento para análise.")
+
+            uploaded_files.append(uploaded)
             if getattr(uploaded, "name", None):
                 cache[digest] = uploaded.name
         finally:
@@ -243,19 +295,24 @@ def build_executive_summary(analysis_text: str) -> dict:
     prompt = _load_executive_summary_prompt()
     contents = f"{prompt}\n\nRELATÓRIO A EXTRAIR:\n{analysis_text[:70000]}"
 
-    try:
-        response = client.models.generate_content(
-            model=get_model(),
-            contents=contents,
-            config=types.GenerateContentConfig(
-                temperature=0.0,
-                response_mime_type="application/json",
-            ),
-        )
-        return _safe_json(getattr(response, "text", "") or "")
-    except Exception:
-        # The application remains functional even if the secondary formatting call fails.
-        return {}
+    # Secondary UI formatting must never make the completed study fail.
+    for model in get_fallback_models():
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                ),
+            )
+            parsed = _safe_json(getattr(response, "text", "") or "")
+            if parsed:
+                return parsed
+        except Exception as exc:
+            if _is_model_unavailable_error(exc) or _is_retryable_error(exc):
+                continue
+            break
+    return {}
 
 
 def _load_quality_gate_prompt() -> str:
@@ -300,7 +357,6 @@ def _generate_grounded_once(client: genai.Client, model: str, contents: list[Any
         contents=contents,
         config=types.GenerateContentConfig(
             tools=[google_search],
-            temperature=temperature,
         ),
     )
 
@@ -309,36 +365,61 @@ def _generate_grounded_resilient(
     client: genai.Client,
     contents: list[Any],
     temperature: float = 0.08,
-    attempts_per_model: int = 3,
+    attempts_per_model: int = 2,
 ):
-    """Generate with retry + exponential backoff + model fallback.
+    """Production resilience for model congestion and model retirement.
 
-    A 503/429/timeout must never immediately abort a client study. Each configured
-    model gets a few tries; only temporary failures move to the next model.
-    Permanent/configuration errors still fail fast, which avoids masking real setup issues.
+    Strategy:
+      1. Try the configured model first.
+      2. Retry transient 429/5xx/network failures with exponential backoff.
+      3. If a model is missing/retired/unsupported, skip it immediately.
+      4. Continue through several current GA Gemini 3 models.
+      5. Only fail after the complete chain is exhausted.
     """
     last_exc: Exception | None = None
+    models = get_fallback_models()
 
-    for model in get_fallback_models():
-        for attempt in range(1, attempts_per_model + 1):
+    for model_index, model in enumerate(models):
+        per_model_attempts = 3 if model_index == 0 else attempts_per_model
+
+        for attempt in range(1, per_model_attempts + 1):
             try:
+                logger.info("Gemini analysis call: model=%s attempt=%s/%s", model, attempt, per_model_attempts)
                 return _generate_grounded_once(client, model, contents, temperature)
             except Exception as exc:
                 last_exc = exc
+
+                if _is_model_unavailable_error(exc):
+                    logger.warning("Gemini model unavailable/unsupported; skipping %s: %s", model, exc)
+                    break
+
                 if not _is_retryable_error(exc):
-                    logger.exception("Gemini non-retryable error using model %s", model)
-                    raise
+                    # A model-specific 4xx/tool incompatibility should not prevent us
+                    # trying the remaining production models. Authentication/key errors
+                    # are the important exception: retrying other models cannot fix them.
+                    text = f"{type(exc).__name__}: {exc}".lower()
+                    auth_error = any(x in text for x in (
+                        "401", "403", "api key", "permission_denied", "unauthenticated",
+                        "billing", "quota has been disabled",
+                    ))
+                    if auth_error:
+                        logger.exception("Gemini authentication/configuration error")
+                        raise
+
+                    logger.warning("Gemini model-specific error; trying next model %s: %s", model, exc)
+                    break
 
                 logger.warning(
                     "Temporary Gemini error using model %s (attempt %s/%s): %s",
-                    model, attempt, attempts_per_model, exc,
+                    model, attempt, per_model_attempts, exc,
                 )
-                if attempt < attempts_per_model:
-                    # 2s, 4s (+ small jitter) keeps us polite during demand spikes.
-                    delay = (2 ** attempt) + random.uniform(0.0, 0.75)
+                if attempt < per_model_attempts:
+                    delay = min(12.0, (1.8 ** attempt) + random.uniform(0.25, 1.0))
                     time.sleep(delay)
 
-        # All attempts for this model failed temporarily; try the next configured fallback.
+        # A tiny pause prevents an immediate burst against the next model endpoint.
+        if model_index < len(models) - 1:
+            time.sleep(random.uniform(0.35, 0.9))
 
     if last_exc is not None:
         raise AIServiceTemporarilyUnavailable(_friendly_upstream_message(last_exc)) from last_exc
