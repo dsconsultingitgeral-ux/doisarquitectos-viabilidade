@@ -139,3 +139,9 @@ V6.5 — SÍNTESE EXECUTIVA SEM PLACEHOLDERS ENGANADORES
 - Sem projeto/proposta anexada, não inventar ABC, fogos ou implantação de projeto. Nesses casos, omitir capacidade numérica sem base e explicar qual parâmetro falta.
 - Sem proposta, MELHOR APROVEITAMENTO não pode ser uma tipologia especulativa apresentada como facto. Preferir o uso dominante/admissível documentalmente suportado e marcar qualquer cenário como CENÁRIO.
 - O dashboard e o PDF têm de derivar do mesmo relatório final e repetir os mesmos valores concretos.
+
+V6.8 — REGRA FINAL DE CONSISTÊNCIA EXECUTIVA
+- Nunca escrever "Não apurado com os documentos disponíveis" para ÁREA se um levantamento topográfico/documento técnico contiver uma área métrica explícita. Nesse caso, mostrar essa área como "área do levantamento/topográfica" e manter separadamente "área jurídica: A CONFIRMAR".
+- Nunca usar "ANÁLISE CONCLUÍDA" como estado de viabilidade. O estado executivo deve ser exclusivamente FAVORÁVEL, FAVORÁVEL COM CONDICIONANTES, INDETERMINADA ou DESFAVORÁVEL.
+- Se a classificação urbanística está confirmada, o uso pretendido/admitido está regulamentarmente conforme e não existe incompatibilidade impeditiva documentada, mas subsistem validações (área jurídica, alinhamentos, índices, servidões, pareceres), usar FAVORÁVEL COM CONDICIONANTES.
+- A mesma decisão deve constar no bloco DECISÃO PRELIMINAR e em ESTADO na CONCLUSÃO TÉCNICA.

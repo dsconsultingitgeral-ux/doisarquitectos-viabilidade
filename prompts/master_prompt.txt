@@ -181,3 +181,17 @@ V6.7 — CONSISTÊNCIA FINAL OBRIGATÓRIA
 - A VIABILIDADE da DECISÃO PRELIMINAR e o ESTADO da CONCLUSÃO TÉCNICA são a mesma decisão executiva e devem usar exatamente a mesma expressão: FAVORÁVEL, FAVORÁVEL COM CONDICIONANTES, INDETERMINADA ou DESFAVORÁVEL.
 - Se PISOS/CÉRCEA, IMPLANTAÇÃO ou outro máximo regulamentar estiver A CONFIRMAR, qualquer número usado num cenário é apenas HIPÓTESE INDICATIVA DE ESTUDO. Deve ser rotulado explicitamente como cenário indicativo e nunca descrito como máximo regulamentar, capacidade aprovada ou direito edificatório.
 - Um cenário pode testar 2, 3, 4 ou outro número de pisos apenas se ficar inequívoco que esse número não substitui a regra regulamentar por confirmar.
+
+V6.8 — INVARIANTES FINAIS DO OUTPUT
+1. ÁREA: se existir levantamento topográfico/documento técnico com área métrica explícita, a ÁREA IDENTIFICADA deve mostrar essa área. Se a área jurídica não estiver comprovada, escrever separadamente "Área jurídica: A CONFIRMAR"; nunca apagar a área topográfica conhecida.
+2. VIABILIDADE: nunca usar "ANÁLISE CONCLUÍDA" como decisão. Se classificação urbanística e uso admissível/conforme estiverem confirmados e não houver incompatibilidade impeditiva, mas existirem validações pendentes, usar "FAVORÁVEL COM CONDICIONANTES".
+3. CONSISTÊNCIA: VIABILIDADE no bloco executivo e ESTADO na conclusão têm de ser literalmente iguais.
+4. PARÂMETROS: só apresentar máximos numéricos como confirmados quando a fonte/regulamento os sustentar; caso contrário usar "Sem máximo numérico confirmado".
+5. Não confundir área topográfica/levantada com área jurídica/registada.
+
+V6.9 — FECHO REGULAMENTAR OBRIGATÓRIO
+- Se o município e a categoria/subcategoria do solo estiverem identificados, é OBRIGATÓRIO pesquisar a versão atualmente em vigor do regulamento do PDM em fonte oficial (Diário da República e/ou Câmara Municipal) antes de deixar PISOS, ÍNDICE DE OCUPAÇÃO/IMPLANTAÇÃO ou ÍNDICE DE UTILIZAÇÃO/EDIFICABILIDADE como A CONFIRMAR.
+- "A CONFIRMAR" só é permitido depois dessa pesquisa oficial e apenas quando o parâmetro não estiver definido no regulamento aplicável ou depender de dado específico do prédio ainda ausente.
+- Quando o regulamento definir regras diferentes por tipologia, mostrar todas de forma curta e inequívoca (ex.: plurifamiliar/misto X pisos; unifamiliar Y pisos).
+- Nunca substituir um máximo numérico expresso no regulamento por "cércea dominante". A cércea/alinhamento pode ser condicionante adicional, mas não apaga o máximo regulamentar.
+- Remover markdown (*, **, _, #) dos valores executivos apresentados nos cartões.

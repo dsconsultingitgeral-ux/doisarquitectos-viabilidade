@@ -406,9 +406,13 @@ def build_canonical_facts(
     def concrete(value: str) -> str:
         v = _without_citations(value)
         vu = v.upper()
-        if not v or vu in {"A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO"}:
+        missing_markers = (
+            "A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO",
+            "NÃO APURADO", "NAO APURADO", "NÃO FOI POSSÍVEL APURAR", "NAO FOI POSSIVEL APURAR"
+        )
+        if not v or vu in missing_markers:
             return ""
-        if "A CONFIRMAR" in vu or "A VALIDAR" in vu:
+        if any(marker in vu for marker in missing_markers):
             return ""
         return v
 
@@ -454,12 +458,31 @@ def build_canonical_facts(
             r"(?i)\b(FAVORÁVEL\s+COM\s+CONDICIONANTES|FAVORÁVEL|DESFAVORÁVEL)\b",
         )) or "A confirmar"
 
+    # A generic/placeholder state must not override concrete regulatory findings.
+    # When the report confirms an urban classification + an admitted/conforming use
+    # and contains unresolved constraints, the honest executive result is
+    # FAVORÁVEL COM CONDICIONANTES (not "análise concluída" or "não apurado").
+    vu = viability.upper()
+    placeholder_viability = (not viability or "NÃO APURADO" in vu or "NAO APURADO" in vu or
+                              "INDETERMINADA" in vu or "A CONFIRMAR" in vu or "A VALIDAR" in vu)
+    regulatory_support = bool(re.search(
+        r"(?is)(?:Uso\s+Principal|Usos?\s+(?:Admitidos?|Admissíveis))[^\n]{0,220}(?:CONFORME|Habitação|Comércio|Serviços)", text
+    ))
+    known_urban_class = bool(re.search(r"(?i)Solo\s+Urbano|Espaços\s+Habitacionais", text))
+    unresolved_constraints = bool(re.search(
+        r"(?i)A\s+CONFIRMAR|condicionantes?|alinhamentos?|área\s+jurídica|servid", text
+    ))
+    explicit_unfavourable = bool(re.search(r"(?i)\bDESFAVORÁVEL\b", text))
+    if placeholder_viability and known_urban_class and regulatory_support and not explicit_unfavourable:
+        viability = "FAVORÁVEL COM CONDICIONANTES" if unresolved_constraints else "FAVORÁVEL"
+
     # ---- Area ----------------------------------------------------------
     area = concrete(_line_value_raw(block, ("ÁREA IDENTIFICADA", "AREA IDENTIFICADA", "ÁREA", "AREA")))
     if not area:
         area = first_match((
             r"(?im)^\s*(?:[-•\x7f]\s*)?(?:ÁREA DO PROJETO\s*/\s*ÁREA JURÍDICA|AREA DO PROJETO\s*/\s*AREA JURIDICA)\s*:\s*(?:Levantamento Topográfico\s*:\s*)?([0-9][0-9 .,'’]*\s*m²)",
-            r"(?im)^\s*(?:Área do Levantamento|AREA DO LEVANTAMENTO)\s+([0-9][0-9 .,'’]*\s*m²)",
+            r"(?is)(?:Área\s+do\s+Polígono\s*\(Levantamento\)|Área\s+do\s+Levantamento|AREA\s+DO\s+LEVANTAMENTO)[^0-9]{0,80}([0-9][0-9 .,'’]*\s*m²)",
+            r"(?is)Polígono\s+total\s*:\s*([0-9][0-9 .,'’]*\s*m²)",
             r"(?i)\bárea\s+(?:total\s+)?(?:levantada|do levantamento)[^\d]{0,50}([0-9][0-9 .,'’]*\s*m²)",
             r"(?i)\b([0-9][0-9 .,'’]*\s*m²)\s*\(polígono\s+global",
         ), max_len=80) or "A confirmar"
@@ -698,7 +721,9 @@ def _replace_decision_block(text: str, facts: dict) -> str:
 
     def executive_value(key: str, missing: str = "Não apurado com os documentos disponíveis") -> str:
         value = _short_value(facts.get(key), "")
-        if value.upper() in {"A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO"}:
+        vu = value.upper()
+        if (vu in {"A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO"}
+                or "NÃO APURADO" in vu or "NAO APURADO" in vu):
             return missing
         return value or missing
 
@@ -735,7 +760,13 @@ def build_executive_summary(analysis_text: str) -> dict:
     It cannot introduce new urbanistic facts; it only reformats existing content.
     """
     if not (analysis_text or "").strip():
-        return {}
+        classification = _clean_display_fact(classification)
+    recommended_use = _clean_display_fact(recommended_use)
+    area = _clean_display_fact(area)
+    implantation = _clean_display_fact(implantation)
+    floors = _clean_display_fact(floors)
+
+    return {}
 
     client = get_client()
     prompt = _load_executive_summary_prompt()
@@ -1029,6 +1060,24 @@ def _report_denies_existing_project(text: str) -> bool:
     return any(m in t for m in markers)
 
 
+def _needs_regulatory_rescue(text: str) -> bool:
+    """True when the report knows the zoning but failed to retrieve core PDM limits."""
+    t = text or ""
+    has_zone = bool(re.search(r"(?i)(Solo\s+Urbano|Espaços\s+(?:Habitacionais|Residenciais)|EH\s*\d)", t))
+    missing_core = bool(re.search(
+        r"(?is)(Número\s+Máximo\s+de\s+Pisos|Índice\s+de\s+Implantação|Índice\s+máximo\s+de\s+ocupação)[^\n]{0,180}A\s+CONFIRMAR",
+        t,
+    )) or bool(re.search(r"(?im)^\s*(?:PISOS|IMPLANTAÇÃO)\s*:\s*(?:A\s+CONFIRMAR|Sem\s+máximo\s+numérico\s+confirmado)", t))
+    return has_zone and missing_core
+
+
+def _clean_display_fact(value: str) -> str:
+    v = re.sub(r"[*_`#]+", "", str(value or ""))
+    v = re.sub(r"\s+", " ", v).strip(" .;:-")
+    # Common model duplication: "Espaços Habitacionais — Espaços Habitacionais Tipo 1"
+    v = re.sub(r"(?i)Espaços\s+Habitacionais\s*[—-]\s*Espaços\s+Habitacionais\s+Tipo", "Espaços Habitacionais Tipo", v)
+    return v
+
 def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
     """V5.1 FAST + SAFE: one grounded AI call per study.
 
@@ -1062,6 +1111,36 @@ def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
         attempts_per_model=1,
     )
     final_text = getattr(response, "text", "") or ""
+
+    # Regulatory rescue: a client report must not stop at "A CONFIRMAR" for core
+    # PDM limits when the municipality + zoning are already identified. Ask Google
+    # grounding once more, narrowly, to retrieve the CURRENT official regulation.
+    # This runs only on incomplete cases, so normal studies keep the fast one-call path.
+    if _needs_regulatory_rescue(final_text):
+        rescue = (
+            "REVISÃO REGULAMENTAR OBRIGATÓRIA. O relatório anterior identificou a "
+            "classe/categoria urbanística mas deixou PISOS/IMPLANTAÇÃO/ÍNDICES por "
+            "confirmar. Antes de responder, PESQUISA NA WEB a versão ATUALMENTE EM "
+            "VIGOR do PDM do município identificado, priorizando Diário da República "
+            "e site oficial da Câmara. Localiza o artigo exato da categoria/subcategoria "
+            "e extrai: número máximo de pisos (incluindo exceções por tipologia), índice "
+            "máximo de ocupação/implantação, índice de utilização/edificabilidade e "
+            "demais parâmetros expressos. NÃO uses cércea dominante como substituto de "
+            "um máximo numérico quando o regulamento oficial define um máximo. Reescreve "
+            "O RELATÓRIO COMPLETO com esses valores e respetivas fontes/artigos. Só deixa "
+            "A CONFIRMAR aquilo que, depois desta pesquisa oficial, realmente não esteja "
+            "definido ou dependa de informação específica do prédio."
+        )
+        rescue_contents = [prompt, document_manifest, rescue, "RELATÓRIO ANTERIOR PARA CORRIGIR:\n" + final_text]
+        for idx, (original, gemini_file) in enumerate(zip(uploaded_files, gemini_files), 1):
+            rescue_contents.append(
+                f"DOCUMENTO ANEXADO {idx}/{len(gemini_files)} — NOME ORIGINAL: {getattr(original, 'name', f'documento_{idx}')}"
+            )
+            rescue_contents.append(gemini_file)
+        response = _generate_grounded_resilient(
+            client, rescue_contents, temperature=0.0, attempts_per_model=1
+        )
+        final_text = getattr(response, "text", "") or final_text
 
     # Safety net: if a project/PIP was deterministically detected in the uploads
     # but the model still says there is no proposal, redo exactly once with a
