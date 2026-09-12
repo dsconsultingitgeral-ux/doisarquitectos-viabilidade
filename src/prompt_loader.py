@@ -68,6 +68,13 @@ REGRAS FINAIS DE EXECUÇÃO — ÚLTIMA PRIORIDADE
 4. Não inventes número de fogos. Se faltar base: A CONFIRMAR.
 5. Os três cenários são sempre: A Conservador; B Equilibrado/Recomendado; C Máximo Potencial Tecnicamente Defensável.
 6. Antes de concluir, verifica coerência entre matriz de usos, cenários e conclusão.
+7. PARÂMETROS REGULAMENTARES NUMÉRICOS: para implantação, pisos, cércea/altura, índices e impermeabilização, devolve o MÁXIMO EXATO definido pela norma aplicável. É PROIBIDO transformar um máximo regulamentar num intervalo de prudência ou cenário. Ex.: se a norma fixa máximo 6 pisos, escreve "6 pisos", nunca "3 a 5" ou "4 a 6".
+8. Só uses um intervalo num parâmetro regulamentar se o próprio artigo/norma aplicável definir explicitamente esse intervalo; identifica nesse caso a fonte concreta.
+9. Se não encontrares artigo/fonte concreta que sustente um valor regulamentar, escreve A CONFIRMAR / NÃO DETERMINADO. Nunca preenchas por plausibilidade.
+10. A decisão preliminar, a matriz final, os cenários e a conclusão devem repetir exatamente os mesmos máximos regulamentares. Não podem existir valores diferentes para implantação/pisos em secções distintas.
+11. CARTOGRAFIA: setas, círculos, marcações, cores ou anotações acrescentadas pelo utilizador a uma planta NÃO fazem parte da legenda oficial e não podem ser interpretadas como classificação urbanística. Uma leitura visual de planta sem correspondência inequívoca com legenda/fonte georreferenciada deve ficar A VALIDAR.
+12. HIERARQUIA DE EVIDÊNCIA: regulamento/artigo oficial > cartografia oficial georreferenciada > outros documentos oficiais > documento/planta fornecida > interpretação visual da IA. Uma fonte inferior não pode contrariar silenciosamente uma fonte superior.
+13. Não confies numa pesquisa livre para "adivinhar" plantas PDM. Quando possível, procura recursos oficiais do município/DGT/SNIT e identifica exatamente o documento/camada consultado; quando não for possível confirmar, assinala A VALIDAR.
 ============================================================
 """
     return master.rstrip() + "\n\n" + context.strip() + "\n\n" + reliability.rstrip() + "\n\n" + addendum.rstrip() + "\n\n" + hard_final.strip() + "\n"

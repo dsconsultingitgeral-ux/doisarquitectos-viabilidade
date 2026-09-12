@@ -7,14 +7,15 @@ import tempfile
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_LEFT
+from reportlab.lib.enums import TA_LEFT, TA_CENTER
 from reportlab.lib.units import mm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle, KeepTogether
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle, KeepTogether, Image
 from reportlab.lib import colors
 from pypdf import PdfReader, PdfWriter
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "assets" / "folha_tipo.pdf"
+COVER_LOGO = ROOT / "assets" / "cover_logo.png"
 
 def _fmt(s: str) -> str:
     s = html.escape(s or "")
@@ -45,6 +46,52 @@ def _parse(text: str):
             yield ("bullet", line[2:])
         else:
             yield ("p", line)
+
+
+def _cover_pdf(title: str, location: str) -> bytes:
+    """Create a clean one-page institutional cover using the client logo."""
+    out = BytesIO()
+    doc = SimpleDocTemplate(
+        out, pagesize=A4, leftMargin=24*mm, rightMargin=24*mm,
+        topMargin=30*mm, bottomMargin=24*mm, title=title, author="doisarquitetos",
+    )
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(
+        name="CoverTitle", parent=styles["Title"], fontName="Helvetica-Bold",
+        fontSize=25, leading=29, textColor=colors.HexColor("#1B1B1B"),
+        alignment=TA_CENTER, spaceAfter=8,
+    ))
+    styles.add(ParagraphStyle(
+        name="CoverLocation", parent=styles["Normal"], fontName="Helvetica",
+        fontSize=11, leading=16, textColor=colors.HexColor("#555B63"),
+        alignment=TA_CENTER,
+    ))
+    styles.add(ParagraphStyle(
+        name="CoverMeta", parent=styles["Normal"], fontName="Helvetica",
+        fontSize=9, leading=13, textColor=colors.HexColor("#7A7F87"),
+        alignment=TA_CENTER,
+    ))
+
+    story = [Spacer(1, 18*mm)]
+    if COVER_LOGO.exists():
+        # Preserve aspect ratio and keep generous white space.
+        img = Image(str(COVER_LOGO), width=150*mm, height=41.5*mm)
+        img.hAlign = "CENTER"
+        story.extend([img, Spacer(1, 35*mm)])
+    else:
+        story.append(Spacer(1, 40*mm))
+
+    story.extend([
+        Paragraph(_fmt(title.upper()), styles["CoverTitle"]),
+        Spacer(1, 7*mm),
+        Paragraph(_fmt(location or "Localização a confirmar"), styles["CoverLocation"]),
+        Spacer(1, 35*mm),
+        Paragraph(_fmt(f"Data do estudo: {datetime.now().strftime('%d/%m/%Y')}"), styles["CoverMeta"]),
+        Spacer(1, 3*mm),
+        Paragraph("Análise preliminar de apoio à decisão urbanística", styles["CoverMeta"]),
+    ])
+    doc.build(story)
+    return out.getvalue()
 
 def _content_pdf(title: str, location: str, analysis_text: str, sources) -> bytes:
     out = BytesIO()
@@ -167,25 +214,28 @@ def _content_pdf(title: str, location: str, analysis_text: str, sources) -> byte
     doc.build(story)
     return out.getvalue()
 
-def build_pdf(title: str, location: str, analysis_text: str, sources) -> bytes:
+def build_pdf(title: str, location: str, analysis_text: str, sources, include_cover: bool = True) -> bytes:
     content_bytes = _content_pdf(title, location, analysis_text, sources)
-
-    # Merge every generated page over the official folha-tipo.
-    if not TEMPLATE.exists():
-        return content_bytes
-
-    template_reader = PdfReader(str(TEMPLATE))
     content_reader = PdfReader(BytesIO(content_bytes))
     writer = PdfWriter()
 
-    template_page = template_reader.pages[0]
+    # Optional institutional cover requested by the client. The remaining pages
+    # keep using the existing official folha-tipo, so the established visual
+    # identity and workflow remain unchanged.
+    # Client requirement: the institutional cover is ALWAYS page 1.
+    # The include_cover argument is retained only for backward API compatibility.
+    cover_reader = PdfReader(BytesIO(_cover_pdf(title, location)))
+    writer.add_page(cover_reader.pages[0])
 
-    for content_page in content_reader.pages:
-        # Clone through a fresh reader page so each merge is independent.
-        base_reader = PdfReader(str(TEMPLATE))
-        base_page = base_reader.pages[0]
-        base_page.merge_page(content_page)
-        writer.add_page(base_page)
+    if TEMPLATE.exists():
+        for content_page in content_reader.pages:
+            base_reader = PdfReader(str(TEMPLATE))
+            base_page = base_reader.pages[0]
+            base_page.merge_page(content_page)
+            writer.add_page(base_page)
+    else:
+        for content_page in content_reader.pages:
+            writer.add_page(content_page)
 
     out = BytesIO()
     writer.write(out)

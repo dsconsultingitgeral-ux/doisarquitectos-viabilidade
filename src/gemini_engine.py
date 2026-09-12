@@ -282,6 +282,130 @@ def _load_executive_summary_prompt() -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _load_canonical_facts_prompt() -> str:
+    return (ROOT / "prompts" / "canonical_facts_prompt.txt").read_text(encoding="utf-8")
+
+
+def _short_value(value: Any, fallback: str = "A confirmar") -> str:
+    value = str(value or "").strip()
+    if not value or value.lower() in {"none", "null", "—", "-"}:
+        return fallback
+    return re.sub(r"\s+", " ", value)[:160]
+
+
+def _decision_block(text: str) -> str:
+    """Return the short executive block without any additional AI call."""
+    m = re.search(
+        r"(?ims)^\s*(?:#+\s*)?DECISÃO PRELIMINAR\s*$\n(.*?)(?=^\s*(?:#+\s*)?(?:1\.|1\s|RESUMO EXECUTIVO|IDENTIFICAÇÃO|DOCUMENTAÇÃO|ENQUADRAMENTO)|\Z)",
+        text or "",
+    )
+    return (m.group(1) if m else "").strip()
+
+
+def _line_value(block: str, labels: tuple[str, ...]) -> str:
+    for label in labels:
+        m = re.search(rf"(?im)^\s*{re.escape(label)}\s*:\s*(.+?)\s*$", block or "")
+        if m:
+            return _short_value(m.group(1))
+    return "A confirmar"
+
+
+def _status_from_value(value: str) -> str:
+    v = (value or "").upper()
+    if "A CONFIRMAR" in v or "A VALIDAR" in v or "NÃO DETERMINADO" in v:
+        return "A VALIDAR"
+    if value and value != "A confirmar":
+        return "PROVÁVEL"
+    return "NÃO DETERMINADO"
+
+
+def _has_numeric_range(value: str) -> bool:
+    return bool(re.search(r"\b\d+(?:[.,]\d+)?\s*(?:a|–|—|-)\s*\d+(?:[.,]\d+)?", value or "", re.I))
+
+
+def _withhold_ambiguous_max(value: str) -> str:
+    """Never expose a merged/range value as a regulatory maximum.
+
+    The client explicitly requires one applicable maximum. When the model has merged
+    regimes/categories into a range, withholding the value is safer than inventing a
+    maximum from the upper bound.
+    """
+    if _has_numeric_range(value):
+        return "A confirmar"
+    return _short_value(value)
+
+
+def build_canonical_facts(analysis_text: str) -> dict:
+    """Build the dashboard record locally from the SAME final report.
+
+    V5.1 intentionally performs zero extra Gemini calls here. This removes the former
+    fourth request per study and guarantees that dashboard and PDF derive from one
+    completed text only.
+    """
+    block = _decision_block(analysis_text)
+    if not block:
+        block = analysis_text or ""
+
+    implantation = _withhold_ambiguous_max(_line_value(block, ("IMPLANTAÇÃO", "IMPLANTACAO")))
+    floors = _withhold_ambiguous_max(_line_value(block, ("PISOS",)))
+
+    facts = {
+        "validated_location": _line_value(block, ("LOCALIZAÇÃO", "LOCALIZACAO")),
+        "viability": _line_value(block, ("VIABILIDADE",)),
+        "area": _line_value(block, ("ÁREA IDENTIFICADA", "AREA IDENTIFICADA", "ÁREA", "AREA")),
+        "classification": _line_value(block, ("CLASSIFICAÇÃO", "CLASSIFICACAO")),
+        "recommended_use": _line_value(block, ("MELHOR APROVEITAMENTO", "USO RECOMENDADO")),
+        "implantation": implantation,
+        "implantation_status": _status_from_value(implantation),
+        "implantation_evidence": "Bloco executivo do relatório final",
+        "floors": floors,
+        "floors_status": _status_from_value(floors),
+        "floors_evidence": "Bloco executivo do relatório final",
+        "height": "A confirmar",
+        "height_status": "NÃO DETERMINADO",
+        "utilization_index": "A confirmar",
+        "utilization_index_status": "NÃO DETERMINADO",
+        "impermeability": "A confirmar",
+        "impermeability_status": "NÃO DETERMINADO",
+        "evidence_status": "NÃO DETERMINADO",
+        "notes": [],
+    }
+
+    statuses = [facts["implantation_status"], facts["floors_status"]]
+    if statuses and all(x == "PROVÁVEL" for x in statuses):
+        facts["evidence_status"] = "PROVÁVEL"
+    elif any(x == "A VALIDAR" for x in statuses):
+        facts["evidence_status"] = "A VALIDAR"
+
+    if facts["validated_location"] == "A confirmar":
+        # Do not invent a location; the UI will fall back to session location.
+        facts["validated_location"] = ""
+    return facts
+
+def _replace_decision_block(text: str, facts: dict) -> str:
+    """Force the visible executive block to use the exact same canonical values as the cards/PDF."""
+    if not facts:
+        return text
+
+    block = "\n".join([
+        "DECISÃO PRELIMINAR",
+        f"VIABILIDADE: {_short_value(facts.get('viability'))}",
+        f"MELHOR APROVEITAMENTO: {_short_value(facts.get('recommended_use'))}",
+        f"ÁREA IDENTIFICADA: {_short_value(facts.get('area'))}",
+        f"CLASSIFICAÇÃO: {_short_value(facts.get('classification'))}",
+        f"IMPLANTAÇÃO: {_short_value(facts.get('implantation'))}",
+        f"PISOS: {_short_value(facts.get('floors'))}",
+        f"EVIDÊNCIA: {_short_value(facts.get('evidence_status'), 'NÃO DETERMINADO')}",
+    ])
+
+    pattern = re.compile(
+        r"(?ims)^\s*(?:#+\s*)?DECISÃO PRELIMINAR\s*$.*?(?=^\s*(?:#+\s*)?(?:1\.|1\s|IDENTIFICAÇÃO|DOCUMENTAÇÃO|RESUMO|ENQUADRAMENTO|##\s)|\Z)"
+    )
+    if pattern.search(text or ""):
+        return pattern.sub(block + "\n\n", text, count=1).strip()
+    return (block + "\n\n" + (text or "")).strip()
+
+
 def build_executive_summary(analysis_text: str) -> dict:
     """Create a small structured view model for the Module 4 cards.
 
@@ -347,6 +471,18 @@ def _quality_issues(text: str) -> list[str]:
         if code not in t and code.replace("á", "a") not in t:
             issues.append(f"Falta {code.upper()} no relatório final.")
 
+    # Client-critical regression: regulatory maxima must not be presented as invented ranges.
+    # We only police the executive block here; scenario ranges elsewhere may be legitimate.
+    decision_match = re.search(r"(?is)decisão preliminar(.*?)(?:\n\s*#|\n\s*1[. —-]|\Z)", text or "")
+    decision = decision_match.group(1) if decision_match else ""
+    if decision:
+        for label in ("PISOS", "IMPLANTAÇÃO"):
+            m = re.search(rf"(?im)^\s*{label}\s*:\s*(.+)$", decision)
+            if m:
+                value = m.group(1).strip()
+                if re.search(r"\b\d+(?:[.,]\d+)?\s*(?:a|–|—|-)\s*\d+(?:[.,]\d+)?", value, re.I):
+                    issues.append(f"{label} surge como intervalo no bloco executivo; usar o máximo regulamentar exato ou A CONFIRMAR.")
+
     return issues
 
 
@@ -357,6 +493,9 @@ def _generate_grounded_once(client: genai.Client, model: str, contents: list[Any
         contents=contents,
         config=types.GenerateContentConfig(
             tools=[google_search],
+            temperature=temperature,
+            top_p=0.25,
+            candidate_count=1,
         ),
     )
 
@@ -426,70 +565,71 @@ def _generate_grounded_resilient(
     raise AIServiceTemporarilyUnavailable("O serviço de IA não está disponível neste momento.")
 
 
-def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
-    """Two-pass grounded analysis with an optional deterministic repair pass.
+def _enforce_client_maximum_rules(text: str) -> str:
+    """Deterministic safety pass for the exact client complaint.
 
-    Pass 1 researches and drafts. Pass 2 independently reviews the draft against hard
-    quality rules using the same parcel documents and web grounding. A third pass only
-    runs when deterministic checks still detect a known critical failure.
+    We do NOT guess the upper number of an ambiguous range. A regulatory maximum must
+    be one supported value. If the model still outputs a numeric range for the two
+    client-critical executive fields, the value is withheld as A CONFIRMAR.
+    """
+    if not text:
+        return text
+
+    lines = text.splitlines()
+    out = []
+    decision = False
+    for raw in lines:
+        stripped = raw.strip()
+        upper = stripped.upper().lstrip("# ").strip()
+        if upper == "DECISÃO PRELIMINAR":
+            decision = True
+            out.append(raw)
+            continue
+        if decision and re.match(r"^(?:#+\s*)?(?:1\.|1\s|RESUMO EXECUTIVO|IDENTIFICAÇÃO|DOCUMENTAÇÃO|ENQUADRAMENTO)", stripped, re.I):
+            decision = False
+
+        if decision:
+            m = re.match(r"(?i)^(\s*)(IMPLANTAÇÃO|IMPLANTACAO|PISOS)(\s*:\s*)(.*)$", raw)
+            if m and _has_numeric_range(m.group(4)):
+                raw = f"{m.group(1)}{m.group(2)}{m.group(3)}A CONFIRMAR - não foi identificado um único máximo regulamentar inequívoco"
+
+        # Also prevent the dedicated regulatory-parameter lines from calling a range
+        # a confirmed maximum later in the report.
+        if re.search(r"(?i)(número\s+máximo\s+de\s+pisos|índice\s+de\s+implantação.*máximo|implantação\s+máxima)", raw) and _has_numeric_range(raw):
+            label = raw.split(":", 1)[0] if ":" in raw else "Parâmetro regulamentar"
+            raw = f"{label}: A CONFIRMAR - a documentação/fonte aplicável não permitiu fixar um único máximo com segurança."
+        out.append(raw)
+    return "\n".join(out).strip()
+
+
+def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
+    """V5.1 FAST + SAFE: one grounded AI call per study.
+
+    The previous V5 could execute draft + independent review + repair + canonical
+    extraction, which made a normal study take several model round-trips. V5.1 keeps
+    the same UI but performs one researched generation, then only deterministic/local
+    consistency checks. If an ambiguous maximum survives, it is withheld rather than
+    triggering another slow AI pass.
     """
     client = get_client()
-    model = get_model()
     gemini_files = upload_files(uploaded_files)
 
-    # PASS 1 — research + technical draft.
-    draft_contents: list[Any] = [prompt]
-    draft_contents.extend(gemini_files)
-    draft_response = _generate_grounded_resilient(client, draft_contents, temperature=0.10)
-    draft_text = getattr(draft_response, "text", "") or ""
-
-    # PASS 2 — final independent quality gate. It sees the same files and may search
-    # official sources again, so the final answer is not merely a stylistic rewrite.
-    review_prompt = _load_quality_gate_prompt()
-    review_contents: list[Any] = [
-        prompt,
-        review_prompt,
-        "\n\nRASCUNHO TÉCNICO A REVER E SUBSTITUIR:\n" + draft_text[:90000],
-    ]
-    review_contents.extend(gemini_files)
-    try:
-        final_response = _generate_grounded_resilient(client, review_contents, temperature=0.05)
-        final_text = getattr(final_response, "text", "") or draft_text
-    except AIServiceTemporarilyUnavailable:
-        # If the independent review is the only call affected by a temporary spike,
-        # preserve the already completed grounded draft instead of losing the study.
-        logger.warning("Quality-gate call unavailable; returning grounded draft safely.")
-        final_response = draft_response
-        final_text = draft_text
-
-    # PASS 3 — only if a known critical regression survives pass 2.
-    issues = _quality_issues(final_text)
-    if issues:
-        repair_contents: list[Any] = [
-            prompt,
-            _load_quality_gate_prompt(),
-            _load_repair_prompt(),
-            "\nFALHAS DETETADAS AUTOMATICAMENTE:\n- " + "\n- ".join(issues),
-            "\n\nRELATÓRIO A CORRIGIR:\n" + final_text[:90000],
-        ]
-        repair_contents.extend(gemini_files)
-        try:
-            repaired = _generate_grounded_resilient(client, repair_contents, temperature=0.02)
-            repaired_text = getattr(repaired, "text", "") or ""
-            if repaired_text.strip():
-                final_response = repaired
-                final_text = repaired_text
-        except AIServiceTemporarilyUnavailable:
-            # Repair is an enhancement pass. A temporary upstream failure must not
-            # destroy a usable final report that has already been produced.
-            logger.warning("Repair pass unavailable; keeping previous completed report.")
-
-    sources = _extract_grounding_sources(final_response)
-    response_id = (
-        getattr(final_response, "response_id", None)
-        or getattr(final_response, "id", None)
-        or ""
+    contents: list[Any] = [prompt]
+    contents.extend(gemini_files)
+    response = _generate_grounded_resilient(
+        client,
+        contents,
+        temperature=0.02,
+        attempts_per_model=1,
     )
+    final_text = getattr(response, "text", "") or ""
+    final_text = _enforce_client_maximum_rules(final_text)
 
-    summary = build_executive_summary(final_text)
+    sources = _extract_grounding_sources(response)
+    response_id = getattr(response, "response_id", None) or getattr(response, "id", None) or ""
+
+    # Zero API calls: UI and PDF consume exactly the same completed report.
+    summary = build_canonical_facts(final_text)
+    final_text = _replace_decision_block(final_text, summary)
     return final_text, sources, str(response_id), summary
+

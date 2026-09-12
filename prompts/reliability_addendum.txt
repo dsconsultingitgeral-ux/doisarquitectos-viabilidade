@@ -115,3 +115,17 @@ Antes de responder confirma:
 - A conclusão responde claramente: “O que dá para fazer aqui?”
 
 Se alguma resposta revelar falsa certeza ou subestimação não justificada, corrige antes de concluir.
+
+
+============================================================
+V5.1 - REGRA DO CLIENTE: MÁXIMOS ÚNICOS E CONSISTÊNCIA
+============================================================
+Esta regra prevalece sobre qualquer instrução anterior que incentive intervalos para parâmetros regulamentares.
+
+- Para PISOS, IMPLANTAÇÃO, ÍNDICE DE UTILIZAÇÃO, IMPERMEABILIZAÇÃO e CÉRCEA, identifica o regime/categoria REALMENTE aplicável ao terreno e devolve o MÁXIMO regulamentar único desse regime.
+- NUNCA combines valores de categorias, subcategorias, cenários ou hipóteses diferentes num intervalo do tipo "2 a 3 pisos", "40% a 50%" ou semelhante.
+- Se a categoria/regime exato não estiver suficientemente confirmado para escolher um único máximo, escreve A CONFIRMAR. Não apresentes um intervalo como se fosse parâmetro do terreno.
+- Cenários de projeto podem ter intervalos de áreas/fogos quando tecnicamente justificados, mas esses intervalos NÃO podem contaminar os campos regulamentares máximos.
+- O bloco DECISÃO PRELIMINAR e a secção PARÂMETROS URBANÍSTICOS têm de repetir exatamente os mesmos máximos regulamentares.
+- Antes de terminar, verifica literalmente que o valor de PISOS e o valor de IMPLANTAÇÃO são idênticos em todas as secções onde são apresentados como regra do terreno.
+- Se não houver evidência oficial suficiente: A CONFIRMAR é obrigatório e é preferível a uma estimativa.

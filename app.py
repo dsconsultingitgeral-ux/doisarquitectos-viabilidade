@@ -693,7 +693,7 @@ elif step == 4:
     use = _card_value(summary, "recommended_use", extract_label(text, ["MELHOR APROVEITAMENTO", "USO MAIS INTERESSANTE", "USO RECOMENDADO"], "A confirmar"))
     implantation = _card_value(summary, "implantation", extract_label(text, ["IMPLANTAÇÃO", "IMPLANTAÇÃO MÁXIMA"], "A confirmar"))
     floors = _card_value(summary, "floors", extract_label(text, ["PISOS", "NÚMERO MÁXIMO DE PISOS"], "A confirmar"))
-    confidence = _clean_confidence(_card_value(summary, "confidence", extract_label(text, ["CONFIANÇA GLOBAL", "CONFIANÇA"], "A confirmar")))
+    evidence = _card_value(summary, "evidence_status", "A validar")
 
     status_class = "da-status-good"
     if "DESFAVORÁVEL" in viability.upper():
@@ -717,7 +717,7 @@ elif step == 4:
     row2 = st.columns(3, gap="small")
     with row2[0]: metric_card("Implantação", implantation, "quando determinada")
     with row2[1]: metric_card("Pisos", floors, "limite / cenário")
-    with row2[2]: metric_card("Confiança", confidence, "evidência global")
+    with row2[2]: metric_card("Evidência", evidence, "estado da fundamentação")
 
     st.write("")
     tabs = st.tabs(["Análise técnica", "Fontes", "Relatório PDF"])
@@ -731,11 +731,13 @@ elif step == 4:
         source_cards(st.session_state.analysis_sources)
 
     with tabs[2]:
+        st.caption("A capa institucional doisarquitectos é incluída automaticamente na primeira página.")
         pdf = build_pdf(
             title="Relatório de Viabilidade Urbanística",
             location=_card_value(summary, "validated_location", st.session_state.location),
             analysis_text=text,
             sources=st.session_state.analysis_sources,
+            include_cover=True,
         )
 
         local_name = (
@@ -754,7 +756,7 @@ elif step == 4:
         <div class="da-hero" style="margin-top:4px">
           <div class="big">Relatório final</div>
           <div class="small">
-            Documento PDF formatado sobre a folha-tipo oficial, com análise técnica,
+            Documento PDF com capa institucional obrigatória, folha-tipo oficial, análise técnica,
             conclusões e fontes consultadas.
           </div>
         </div>
