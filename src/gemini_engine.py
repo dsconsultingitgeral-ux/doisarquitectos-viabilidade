@@ -526,33 +526,52 @@ def build_canonical_facts(
     implantation = implantation or "A confirmar"
 
     # ---- Floors --------------------------------------------------------
-    floors = concrete(_line_value_raw(block, ("PISOS",)))
-    if not floors:
-        # Search the full technical body, including markdown/plain-text tables
-        # where the label and value can be separated by line breaks.
-        multi = first_match((
-            r"(?is)Número\s+de\s+Pisos\s*\(Plurifamiliar\s*/\s*Misto\).*?Máximo\s+de\s+(\d+\s+pisos?)",
-            r"(?is)Pisos?\s+Acima\s+do\s+Solo.*?Máximo\s+de\s+(\d+\s+pisos?).*?(?:multifamiliares?|misto|comércio)",
-            r"(?i)(?:Máximo\s+de\s+)?(\d+\s+pisos?)\s*\([^)]*\)\s*para\s+edifícios\s+multifamiliares",
-            r"(?i)multifamiliar[^\n]{0,120}?máximo\s+de\s+(\d+\s+pisos?)",
-            r"(?i)Máximo\s+regulamentar\s+de\s+(\d+\s+pisos?)\s+acima\s+do\s+solo",
-            r"(?is)admitindo\s+edificação\s+plurifamiliar\s+e\s+mista\s+até\s+(\d+\s+pisos?)",
-        ), max_len=40)
-        uni = first_match((
-            r"(?is)Número\s+de\s+Pisos\s*\(Moradias\s+Unifamiliares\).*?Máximo\s+de\s+(\d+\s+pisos?)",
-            r"(?i)(?:Máximo\s+de\s+)?(\d+\s+pisos?)\s+para\s+moradias\s+unifamiliares",
-            r"(?i)\((\d+\s+pisos?)\s+se\s+moradias\s+unifamiliares\)",
-        ), max_len=40)
-        if multi and uni and multi != uni:
-            floors = f"{multi} plurifamiliar/misto · {uni} unifamiliar"
-        elif multi:
-            floors = multi
-        elif uni:
-            floors = uni
-        else:
-            floors = first_match((
-                r"(?im)^\s*(?:[-•\x7f]\s*)?PISOS\s+PROPOSTOS\s*/\s*REGRA\s*:\s*([^\n]+)",
-            ), max_len=120)
+    # IMPORTANT: never let a short executive value (e.g. "2 pisos") erase a
+    # more complete rule in the technical body.  In many PDMs the maximum is
+    # typology-dependent (e.g. 3 pisos plurifamiliar/misto and 2 unifamiliar).
+    executive_floors = concrete(_line_value_raw(block, ("PISOS",)))
+
+    # Search the full technical body, including markdown/plain-text tables and
+    # conclusion lines where the label/value may be split across line breaks.
+    multi = first_match((
+        r"(?is)Número\s+de\s+Pisos\s*\(Plurifamiliar\s*/\s*Misto\).*?Máximo\s+de\s+(\d+\s+pisos?)",
+        r"(?is)Pisos?\s+Acima\s+do\s+Solo.*?Máximo\s+de\s+(\d+\s+pisos?).*?(?:multifamiliares?|misto|comércio)",
+        r"(?i)(?:Máximo\s+de\s+)?(\d+\s+pisos?)\s*\([^)]*\)\s*para\s+edifícios\s+(?:multi|pluri)familiares",
+        r"(?i)(?:multi|pluri)familiar[^\n]{0,160}?máximo\s+de\s+(\d+\s+pisos?)",
+        r"(?i)Máximo\s+regulamentar\s+de\s+(\d+\s+pisos?)\s+acima\s+do\s+solo",
+        r"(?is)admitindo\s+edificação\s+plurifamiliar\s+e\s+mista\s+até\s+(\d+\s+pisos?)",
+        r"(?im)^\s*(?:[-•\x7f]\s*)?PISOS\s+PERMITIDOS\s*:\s*(\d+\s+pisos?)\s+acima[^\n]*(?:plurifamiliar|misto)",
+        r"(?i)cércea\s*/\s*pisos\s*:\s*(\d+\s+pisos?)\s+acima[^\n]*(?:plurifamiliar|misto)",
+    ), max_len=40)
+    if not multi:
+        m_multi = re.search(
+            r"(?is)Número\s+(?:Máximo\s+)?de\s+Pisos.*?(\d+\s+pisos?)\s+acima.*?(?:plurifamiliar|multifamiliar|misto)",
+            text,
+        )
+        if m_multi:
+            multi = re.sub(r"\s+", " ", m_multi.group(1)).strip()
+
+    uni = first_match((
+        r"(?is)Número\s+de\s+Pisos\s*\(Moradias\s+Unifamiliares\).*?Máximo\s+de\s+(\d+\s+pisos?)",
+        r"(?i)(?:Máximo\s+de\s+)?(\d+\s+pisos?)\s+para\s+moradias\s+unifamiliares",
+        r"(?i)\((?:exceto\s+moradias\s+unifamiliares\s*:\s*)?(\d+\s+pisos?)\)",
+        r"(?i)(\d+\s+pisos?)\s*\(moradias\s+unifamiliares\)",
+        r"(?i)(?:moradias|habitação)\s+unifamiliares?[^\n]{0,120}?(\d+\s+pisos?)",
+    ), max_len=40)
+
+    # Prefer the complete typology-aware rule whenever both regimes are found.
+    if multi and uni and multi != uni:
+        floors = f"{multi} plurifamiliar/misto · {uni} unifamiliar"
+    elif multi:
+        floors = multi
+    elif uni and not executive_floors:
+        floors = uni
+    elif executive_floors:
+        floors = executive_floors
+    else:
+        floors = first_match((
+            r"(?im)^\s*(?:[-•\x7f]\s*)?PISOS\s+PROPOSTOS\s*/\s*REGRA\s*:\s*([^\n]+)",
+        ), max_len=120)
     floors = floors or "A confirmar"
 
     # ---- Extra potential values (used by the UI when available) -------
@@ -577,7 +596,7 @@ def build_canonical_facts(
         units = ""
 
     constraint = first_match((
-        r"(?im)^\s*(?:[-•\x7f]\s*)?PRINCIPAL(?:ES)?\s+CONDICIONANTE(?:S)?\s*:\s*([^\n]+)",
+        r"(?im)^\s*(?:[-•\x7f]\s*)?PRINCIPA(?:L|IS)\s+CONDICIONANTE(?:S)?\s*:\s*([^\n]+)",
         r"(?i)principal\s+condicionante\s+identificada\s+é\s+([^\n.]+)",
         r"(?is)Património\s+Cultural\s*[—-]\s*Zona\s+Geral\s*/\s*Especial\s+de\s+Proteção\s*\(ZGP\s*/\s*ZEP\)",
     ), max_len=140)
