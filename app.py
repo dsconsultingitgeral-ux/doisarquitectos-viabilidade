@@ -670,12 +670,11 @@ elif step == 4:
     area = _card_value(summary, "area", extract_label(text, ["ÁREA IDENTIFICADA", "ÁREA CONSIDERADA", "ÁREA"], "A confirmar"))
     classification = _card_value(summary, "classification", extract_label(text, ["CLASSIFICAÇÃO", "CATEGORIA / SUBCATEGORIA", "CATEGORIA"], "A confirmar"))
     use = _card_value(summary, "recommended_use", extract_label(text, ["MELHOR APROVEITAMENTO", "USO MAIS INTERESSANTE", "USO RECOMENDADO"], "A confirmar"))
-    implantation = _card_value(summary, "implantation", extract_label(text, ["IMPLANTAÇÃO", "IMPLANTAÇÃO MÁXIMA"], ""))
-    floors = _card_value(summary, "floors", extract_label(text, ["PISOS", "NÚMERO MÁXIMO DE PISOS"], ""))
-    if not _is_concrete_card(implantation):
-        implantation = "Sem máximo confirmado"
-    if not _is_concrete_card(floors):
-        floors = "Sem máximo confirmado"
+    # V7.0 ROBUST MODE: the executive dashboard is intentionally generic.
+    # Detailed numeric parameters remain in the technical report, where their
+    # context, article and caveats can be read without creating contradictory cards.
+    urban_parameters = _card_value(summary, "urban_parameters", "Consultar análise técnica")
+    validation = _card_value(summary, "validation", "PDM / regulamento aplicável / validação municipal quando necessária")
     evidence = _card_value(summary, "evidence_status", "A validar")
 
     status_class = "da-status-good"
@@ -698,8 +697,8 @@ elif step == 4:
 
     st.write("")
     row2 = st.columns(3, gap="small")
-    with row2[0]: metric_card("Implantação", implantation, "cenário recomendado / valor confirmado")
-    with row2[1]: metric_card("Pisos", floors, "regra aplicável por tipologia")
+    with row2[0]: metric_card("Parâmetros urbanísticos", urban_parameters, "pisos, índices, implantação e afastamentos no relatório")
+    with row2[1]: metric_card("Validação", validation, "aplicável ao processo e ao município")
     with row2[2]: metric_card("Evidência", evidence, "estado da fundamentação")
 
     # Potencial complementar: usa apenas valores já existentes no mesmo relatório.

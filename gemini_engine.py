@@ -549,33 +549,52 @@ def build_canonical_facts(
     implantation = implantation or "A confirmar"
 
     # ---- Floors --------------------------------------------------------
-    floors = concrete(_line_value_raw(block, ("PISOS",)))
-    if not floors:
-        # Search the full technical body, including markdown/plain-text tables
-        # where the label and value can be separated by line breaks.
-        multi = first_match((
-            r"(?is)Número\s+de\s+Pisos\s*\(Plurifamiliar\s*/\s*Misto\).*?Máximo\s+de\s+(\d+\s+pisos?)",
-            r"(?is)Pisos?\s+Acima\s+do\s+Solo.*?Máximo\s+de\s+(\d+\s+pisos?).*?(?:multifamiliares?|misto|comércio)",
-            r"(?i)(?:Máximo\s+de\s+)?(\d+\s+pisos?)\s*\([^)]*\)\s*para\s+edifícios\s+multifamiliares",
-            r"(?i)multifamiliar[^\n]{0,120}?máximo\s+de\s+(\d+\s+pisos?)",
-            r"(?i)Máximo\s+regulamentar\s+de\s+(\d+\s+pisos?)\s+acima\s+do\s+solo",
-            r"(?is)admitindo\s+edificação\s+plurifamiliar\s+e\s+mista\s+até\s+(\d+\s+pisos?)",
-        ), max_len=40)
-        uni = first_match((
-            r"(?is)Número\s+de\s+Pisos\s*\(Moradias\s+Unifamiliares\).*?Máximo\s+de\s+(\d+\s+pisos?)",
-            r"(?i)(?:Máximo\s+de\s+)?(\d+\s+pisos?)\s+para\s+moradias\s+unifamiliares",
-            r"(?i)\((\d+\s+pisos?)\s+se\s+moradias\s+unifamiliares\)",
-        ), max_len=40)
-        if multi and uni and multi != uni:
-            floors = f"{multi} plurifamiliar/misto · {uni} unifamiliar"
-        elif multi:
-            floors = multi
-        elif uni:
-            floors = uni
-        else:
-            floors = first_match((
-                r"(?im)^\s*(?:[-•\x7f]\s*)?PISOS\s+PROPOSTOS\s*/\s*REGRA\s*:\s*([^\n]+)",
-            ), max_len=120)
+    # IMPORTANT: never let a short executive value (e.g. "2 pisos") erase a
+    # more complete rule in the technical body.  In many PDMs the maximum is
+    # typology-dependent (e.g. 3 pisos plurifamiliar/misto and 2 unifamiliar).
+    executive_floors = concrete(_line_value_raw(block, ("PISOS",)))
+
+    # Search the full technical body, including markdown/plain-text tables and
+    # conclusion lines where the label/value may be split across line breaks.
+    multi = first_match((
+        r"(?is)Número\s+de\s+Pisos\s*\(Plurifamiliar\s*/\s*Misto\).*?Máximo\s+de\s+(\d+\s+pisos?)",
+        r"(?is)Pisos?\s+Acima\s+do\s+Solo.*?Máximo\s+de\s+(\d+\s+pisos?).*?(?:multifamiliares?|misto|comércio)",
+        r"(?i)(?:Máximo\s+de\s+)?(\d+\s+pisos?)\s*\([^)]*\)\s*para\s+edifícios\s+(?:multi|pluri)familiares",
+        r"(?i)(?:multi|pluri)familiar[^\n]{0,160}?máximo\s+de\s+(\d+\s+pisos?)",
+        r"(?i)Máximo\s+regulamentar\s+de\s+(\d+\s+pisos?)\s+acima\s+do\s+solo",
+        r"(?is)admitindo\s+edificação\s+plurifamiliar\s+e\s+mista\s+até\s+(\d+\s+pisos?)",
+        r"(?im)^\s*(?:[-•\x7f]\s*)?PISOS\s+PERMITIDOS\s*:\s*(\d+\s+pisos?)\s+acima[^\n]*(?:plurifamiliar|misto)",
+        r"(?i)cércea\s*/\s*pisos\s*:\s*(\d+\s+pisos?)\s+acima[^\n]*(?:plurifamiliar|misto)",
+    ), max_len=40)
+    if not multi:
+        m_multi = re.search(
+            r"(?is)Número\s+(?:Máximo\s+)?de\s+Pisos.*?(\d+\s+pisos?)\s+acima.*?(?:plurifamiliar|multifamiliar|misto)",
+            text,
+        )
+        if m_multi:
+            multi = re.sub(r"\s+", " ", m_multi.group(1)).strip()
+
+    uni = first_match((
+        r"(?is)Número\s+de\s+Pisos\s*\(Moradias\s+Unifamiliares\).*?Máximo\s+de\s+(\d+\s+pisos?)",
+        r"(?i)(?:Máximo\s+de\s+)?(\d+\s+pisos?)\s+para\s+moradias\s+unifamiliares",
+        r"(?i)\((?:exceto\s+moradias\s+unifamiliares\s*:\s*)?(\d+\s+pisos?)\)",
+        r"(?i)(\d+\s+pisos?)\s*\(moradias\s+unifamiliares\)",
+        r"(?i)(?:moradias|habitação)\s+unifamiliares?[^\n]{0,120}?(\d+\s+pisos?)",
+    ), max_len=40)
+
+    # Prefer the complete typology-aware rule whenever both regimes are found.
+    if multi and uni and multi != uni:
+        floors = f"{multi} plurifamiliar/misto · {uni} unifamiliar"
+    elif multi:
+        floors = multi
+    elif uni and not executive_floors:
+        floors = uni
+    elif executive_floors:
+        floors = executive_floors
+    else:
+        floors = first_match((
+            r"(?im)^\s*(?:[-•\x7f]\s*)?PISOS\s+PROPOSTOS\s*/\s*REGRA\s*:\s*([^\n]+)",
+        ), max_len=120)
     floors = floors or "A confirmar"
 
     # ---- Extra potential values (used by the UI when available) -------
@@ -600,7 +619,7 @@ def build_canonical_facts(
         units = ""
 
     constraint = first_match((
-        r"(?im)^\s*(?:[-•\x7f]\s*)?PRINCIPAL(?:ES)?\s+CONDICIONANTE(?:S)?\s*:\s*([^\n]+)",
+        r"(?im)^\s*(?:[-•\x7f]\s*)?PRINCIPA(?:L|IS)\s+CONDICIONANTE(?:S)?\s*:\s*([^\n]+)",
         r"(?i)principal\s+condicionante\s+identificada\s+é\s+([^\n.]+)",
         r"(?is)Património\s+Cultural\s*[—-]\s*Zona\s+Geral\s*/\s*Especial\s+de\s+Proteção\s*\(ZGP\s*/\s*ZEP\)",
     ), max_len=140)
@@ -648,44 +667,121 @@ def build_canonical_facts(
 
     return facts
 
-def _replace_decision_block(text: str, facts: dict) -> str:
-    """Render exactly one executive block and keep the technical body once.
 
-    The previous regex could replace only the first placeholder block and leave a
-    second DECISÃO PRELIMINAR immediately underneath.  For client output we keep
-    one clean executive block and start the body at section 1.
+def _generic_executive_facts(facts: dict) -> dict:
+    """V7.0 robust executive layer.
+
+    The client dashboard must be stable across municipalities and document sets.
+    It therefore exposes only facts that can be represented generically without
+    turning every study into a brittle regex contest. Detailed regulatory numbers
+    stay in the technical report when they are actually supported.
+    """
+    f = dict(facts or {})
+
+    # Clean markdown/noise and keep labels concise.
+    for key in ("classification", "recommended_use", "area", "viability"):
+        f[key] = _clean_display_fact(f.get(key, ""))
+
+    c = str(f.get("classification", "") or "")
+    c = re.sub(r"(?i)^Solo\s+Urbano\s*[—-]\s*Espaços\s+Habitacionais\s*[—-]\s*", "Solo Urbano — ", c)
+    c = re.sub(r"(?i)Espaços\s+Habitacionais\s+Tipo\s*(\d+)\s*\(EH\s*\1\)", r"Espaços Habitacionais Tipo \1 (EH\1)", c)
+    c = re.sub(r"\s+", " ", c).strip(" .;:-")
+    if c:
+        f["classification"] = c[:95]
+
+    u = str(f.get("recommended_use", "") or "")
+    uu = u.upper()
+    if "HABITA" in uu or "ESPAÇOS HABITACIONAIS" in c.upper():
+        f["recommended_use"] = "Habitação (uso dominante)"
+    elif u:
+        f["recommended_use"] = u[:70]
+
+    # Never let the dashboard pretend a precise regulatory maximum is mandatory
+    # to understand the study. Those figures belong in the technical analysis.
+    f["urban_parameters"] = "Consultar análise técnica"
+    f["validation"] = "PDM / regulamento aplicável / validação municipal quando necessária"
+
+    # Keep detailed values in the dict for PDF/body logic, but the executive UI
+    # no longer depends on them.
+    return f
+
+
+def _harmonize_client_report(text: str, facts: dict) -> str:
+    """Final deterministic client-safety pass (V6.7).
+
+    Keeps scenarios explicitly hypothetical when regulatory maxima are not
+    confirmed and forces the conclusion ESTADO to use the same viability label
+    shown in the executive block. No new urbanistic facts are introduced.
+    """
+    out = text or ""
+    if not out:
+        return out
+
+    # If floors/implantation are not numerically confirmed, scenario numbers are
+    # allowed only as design hypotheses. Mark the scenarios once, prominently.
+    uncertain = []
+    for key, label in (("floors", "pisos/cércea"), ("implantation", "implantação")):
+        v = str((facts or {}).get(key, "") or "").upper()
+        if not v or "A CONFIRMAR" in v or "SEM MÁXIMO" in v or "NÃO DETERMINADO" in v or "NAO DETERMINADO" in v:
+            uncertain.append(label)
+    if uncertain and re.search(r"(?i)Cenário\s+[ABC]", out):
+        note = ("NOTA DE LEITURA DOS CENÁRIOS: Os valores numéricos apresentados nos cenários são "
+                "hipóteses indicativas de estudo e NÃO constituem máximos regulamentares confirmados. "
+                "Os parâmetros ainda dependentes de validação municipal permanecem A CONFIRMAR.")
+        # Insert before the first scenario section, but never duplicate it.
+        if "NOTA DE LEITURA DOS CENÁRIOS" not in out:
+            m = re.search(r"(?im)^\s*(?:[-•]\s*)?Cenário\s+A\b", out)
+            if m:
+                out = out[:m.start()] + note + "\n\n" + out[m.start():]
+
+    # One decision vocabulary everywhere. The conclusion must not contradict
+    # the executive card (e.g. POTENCIALMENTE CONFORME vs FAVORÁVEL...).
+    viability = str((facts or {}).get("viability", "") or "").strip()
+    if viability and viability.upper() not in {"A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO"}:
+        # Restrict replacement to section 10, preserving all technical prose.
+        m = re.search(r"(?is)(^\s*(?:#+\s*)?10\.\s*CONCLUSÃO TÉCNICA\b)(.*?)(?=^\s*(?:#+\s*)?11\.|\Z)", out, re.M)
+        if m:
+            sec = m.group(2)
+            sec2 = re.sub(r"(?im)^(\s*(?:[-•]\s*)?ESTADO\s*:\s*).*$", lambda x: x.group(1) + viability, sec, count=1)
+            out = out[:m.start(2)] + sec2 + out[m.end(2):]
+
+    return out
+
+def _replace_decision_block(text: str, facts: dict) -> str:
+    """Render a municipality-agnostic executive block (V7.0 robust mode).
+
+    Numerical urban parameters are intentionally kept out of the executive block.
+    They remain available in the detailed technical sections when supported.
     """
     if not facts:
         return text
 
-    def executive_value(key: str, missing: str = "Não apurado com os documentos disponíveis") -> str:
+    facts = _generic_executive_facts(facts)
+
+    def executive_value(key: str, missing: str = "A validar na análise técnica") -> str:
         value = _short_value(facts.get(key), "")
         vu = value.upper()
-        if (vu in {"A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO"}
+        if (not value or vu in {"A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO"}
                 or "NÃO APURADO" in vu or "NAO APURADO" in vu):
             return missing
-        return value or missing
+        return value
 
     block = "\n".join([
         "DECISÃO PRELIMINAR",
-        f"VIABILIDADE: {executive_value('viability')}",
-        f"MELHOR APROVEITAMENTO: {executive_value('recommended_use')}",
-        f"ÁREA IDENTIFICADA: {executive_value('area')}",
-        f"CLASSIFICAÇÃO: {executive_value('classification')}",
-        f"IMPLANTAÇÃO: {executive_value('implantation', 'Sem máximo numérico confirmado')}",
-        f"PISOS: {executive_value('floors', 'Sem máximo numérico confirmado')}",
+        f"VIABILIDADE: {executive_value('viability', 'ANÁLISE PRELIMINAR')}",
+        f"ÁREA DE REFERÊNCIA: {executive_value('area')}",
+        f"ENQUADRAMENTO: {executive_value('classification')}",
+        f"USO DOMINANTE: {executive_value('recommended_use')}",
+        "PARÂMETROS URBANÍSTICOS: Consultar análise técnica e respetiva fundamentação regulamentar",
         f"EVIDÊNCIA: {executive_value('evidence_status', 'A validar')}",
     ])
 
     source = (text or "").strip()
-    # The technical report is contractually sectioned.  Preserve everything from
-    # section 1 onward and replace any duplicated/placeholder preamble.
     m = re.search(r"(?im)^\s*(?:#+\s*)?1\.\s*RESUMO EXECUTIVO\s*$", source)
     if m:
         body = source[m.start():].lstrip()
         return (block + "\n\n" + body).strip()
 
-    # Defensive fallback for unusual output: remove every short decision block.
     pattern = re.compile(
         r"(?ims)^\s*(?:#+\s*)?DECISÃO PRELIMINAR\s*$.*?(?=^\s*(?:#+\s*)?(?:DECISÃO PRELIMINAR|\d+\.|RESUMO EXECUTIVO|IDENTIFICAÇÃO|DOCUMENTAÇÃO|ENQUADRAMENTO)|\Z)"
     )
@@ -699,7 +795,13 @@ def build_executive_summary(analysis_text: str) -> dict:
     It cannot introduce new urbanistic facts; it only reformats existing content.
     """
     if not (analysis_text or "").strip():
-        return {}
+        classification = _clean_display_fact(classification)
+    recommended_use = _clean_display_fact(recommended_use)
+    area = _clean_display_fact(area)
+    implantation = _clean_display_fact(implantation)
+    floors = _clean_display_fact(floors)
+
+    return {}
 
     client = get_client()
     prompt = _load_executive_summary_prompt()
@@ -993,6 +1095,24 @@ def _report_denies_existing_project(text: str) -> bool:
     return any(m in t for m in markers)
 
 
+def _needs_regulatory_rescue(text: str) -> bool:
+    """True when the report knows the zoning but failed to retrieve core PDM limits."""
+    t = text or ""
+    has_zone = bool(re.search(r"(?i)(Solo\s+Urbano|Espaços\s+(?:Habitacionais|Residenciais)|EH\s*\d)", t))
+    missing_core = bool(re.search(
+        r"(?is)(Número\s+Máximo\s+de\s+Pisos|Índice\s+de\s+Implantação|Índice\s+máximo\s+de\s+ocupação)[^\n]{0,180}A\s+CONFIRMAR",
+        t,
+    )) or bool(re.search(r"(?im)^\s*(?:PISOS|IMPLANTAÇÃO)\s*:\s*(?:A\s+CONFIRMAR|Sem\s+máximo\s+numérico\s+confirmado)", t))
+    return has_zone and missing_core
+
+
+def _clean_display_fact(value: str) -> str:
+    v = re.sub(r"[*_`#]+", "", str(value or ""))
+    v = re.sub(r"\s+", " ", v).strip(" .;:-")
+    # Common model duplication: "Espaços Habitacionais — Espaços Habitacionais Tipo 1"
+    v = re.sub(r"(?i)Espaços\s+Habitacionais\s*[—-]\s*Espaços\s+Habitacionais\s+Tipo", "Espaços Habitacionais Tipo", v)
+    return v
+
 def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
     """V5.1 FAST + SAFE: one grounded AI call per study.
 
@@ -1027,6 +1147,39 @@ def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
     )
     final_text = getattr(response, "text", "") or ""
 
+    # Regulatory rescue: a client report must not stop at "A CONFIRMAR" for core
+    # PDM limits when the municipality + zoning are already identified. Ask Google
+    # grounding once more, narrowly, to retrieve the CURRENT official regulation.
+    # This runs only on incomplete cases, so normal studies keep the fast one-call path.
+    # V7.0 ROBUST MODE: do not launch a second regulatory-search pass merely because
+    # one numeric parameter is missing. The executive conclusion is intentionally
+    # generic and the technical body remains the authoritative place for details.
+    if False and _needs_regulatory_rescue(final_text):
+        rescue = (
+            "REVISÃO REGULAMENTAR OBRIGATÓRIA. O relatório anterior identificou a "
+            "classe/categoria urbanística mas deixou PISOS/IMPLANTAÇÃO/ÍNDICES por "
+            "confirmar. Antes de responder, PESQUISA NA WEB a versão ATUALMENTE EM "
+            "VIGOR do PDM do município identificado, priorizando Diário da República "
+            "e site oficial da Câmara. Localiza o artigo exato da categoria/subcategoria "
+            "e extrai: número máximo de pisos (incluindo exceções por tipologia), índice "
+            "máximo de ocupação/implantação, índice de utilização/edificabilidade e "
+            "demais parâmetros expressos. NÃO uses cércea dominante como substituto de "
+            "um máximo numérico quando o regulamento oficial define um máximo. Reescreve "
+            "O RELATÓRIO COMPLETO com esses valores e respetivas fontes/artigos. Só deixa "
+            "A CONFIRMAR aquilo que, depois desta pesquisa oficial, realmente não esteja "
+            "definido ou dependa de informação específica do prédio."
+        )
+        rescue_contents = [prompt, document_manifest, rescue, "RELATÓRIO ANTERIOR PARA CORRIGIR:\n" + final_text]
+        for idx, (original, gemini_file) in enumerate(zip(uploaded_files, gemini_files), 1):
+            rescue_contents.append(
+                f"DOCUMENTO ANEXADO {idx}/{len(gemini_files)} — NOME ORIGINAL: {getattr(original, 'name', f'documento_{idx}')}"
+            )
+            rescue_contents.append(gemini_file)
+        response = _generate_grounded_resilient(
+            client, rescue_contents, temperature=0.0, attempts_per_model=1
+        )
+        final_text = getattr(response, "text", "") or final_text
+
     # Safety net: if a project/PIP was deterministically detected in the uploads
     # but the model still says there is no proposal, redo exactly once with a
     # focused instruction. This avoids shipping a structurally wrong report.
@@ -1057,7 +1210,9 @@ def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
     response_id = getattr(response, "response_id", None) or getattr(response, "id", None) or ""
 
     # Zero API calls: UI and PDF consume exactly the same completed report.
-    summary = build_canonical_facts(final_text, sources=sources, has_documents=bool(uploaded_files))
-    final_text = _replace_decision_block(final_text, summary)
+    detailed_summary = build_canonical_facts(final_text, sources=sources, has_documents=bool(uploaded_files))
+    final_text = _harmonize_client_report(final_text, detailed_summary)
+    final_text = _replace_decision_block(final_text, detailed_summary)
+    summary = _generic_executive_facts(detailed_summary)
     return final_text, sources, str(response_id), summary
 
