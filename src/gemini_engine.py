@@ -286,13 +286,45 @@ def _short_value(value: Any, fallback: str = "A confirmar") -> str:
 
 
 def _decision_block(text: str) -> str:
-    """Return the short executive block without any additional AI call."""
-    m = re.search(
-        r"(?ims)^\s*(?:#+\s*)?DECISÃO PRELIMINAR\s*$\n(.*?)(?=^\s*(?:#+\s*)?(?:1\.|1\s|RESUMO EXECUTIVO|IDENTIFICAÇÃO|DOCUMENTAÇÃO|ENQUADRAMENTO)|\Z)",
-        text or "",
-    )
-    return (m.group(1) if m else "").strip()
+    """Return the most informative DECISÃO PRELIMINAR block.
 
+    Some model responses can contain an initial placeholder block followed by the
+    real populated block.  The old parser always selected the first one, which
+    made the dashboard show only "A confirmar" even when the report below had
+    confirmed values.  We score every decision block and keep the one with the
+    greatest amount of concrete information.
+    """
+    source = text or ""
+    pattern = re.compile(
+        r"(?ims)^\s*(?:#+\s*)?DECISÃO PRELIMINAR\s*$\n(.*?)(?=^\s*(?:#+\s*)?(?:DECISÃO PRELIMINAR|\d+\.|RESUMO EXECUTIVO|IDENTIFICAÇÃO|DOCUMENTAÇÃO|ENQUADRAMENTO)|\Z)"
+    )
+    blocks = [m.group(1).strip() for m in pattern.finditer(source)]
+    if not blocks:
+        return ""
+
+    labels = (
+        "VIABILIDADE", "MELHOR APROVEITAMENTO", "ÁREA IDENTIFICADA",
+        "CLASSIFICAÇÃO", "IMPLANTAÇÃO", "PISOS", "EVIDÊNCIA"
+    )
+
+    def score(block: str) -> tuple[int, int]:
+        useful = 0
+        concrete = 0
+        upper = block.upper()
+        for label in labels:
+            m = re.search(rf"(?im)^\s*{re.escape(label)}\s*:\s*(.+?)\s*$", block)
+            if not m:
+                continue
+            value = m.group(1).strip()
+            useful += 1
+            vu = value.upper()
+            if value and "A CONFIRMAR" not in vu and "A VALIDAR" not in vu:
+                concrete += 1
+        # Prefer cited/grounded populated blocks when scores tie.
+        citations = len(re.findall(r"\[\d+(?:\s*[,;]\s*\d+)*\]", block))
+        return concrete * 100 + useful * 10 + citations, len(block)
+
+    return max(blocks, key=score)
 
 def _line_value(block: str, labels: tuple[str, ...]) -> str:
     for label in labels:
@@ -406,7 +438,12 @@ def build_canonical_facts(analysis_text: str, sources: list[SourceLink] | None =
     return facts
 
 def _replace_decision_block(text: str, facts: dict) -> str:
-    """Force the visible executive block to use the exact same canonical values as the cards/PDF."""
+    """Render exactly one executive block and keep the technical body once.
+
+    The previous regex could replace only the first placeholder block and leave a
+    second DECISÃO PRELIMINAR immediately underneath.  For client output we keep
+    one clean executive block and start the body at section 1.
+    """
     if not facts:
         return text
 
@@ -421,13 +458,20 @@ def _replace_decision_block(text: str, facts: dict) -> str:
         f"EVIDÊNCIA: {_short_value(facts.get('evidence_status'), 'NÃO DETERMINADO')}",
     ])
 
-    pattern = re.compile(
-        r"(?ims)^\s*(?:#+\s*)?DECISÃO PRELIMINAR\s*$.*?(?=^\s*(?:#+\s*)?(?:1\.|1\s|IDENTIFICAÇÃO|DOCUMENTAÇÃO|RESUMO|ENQUADRAMENTO|##\s)|\Z)"
-    )
-    if pattern.search(text or ""):
-        return pattern.sub(block + "\n\n", text, count=1).strip()
-    return (block + "\n\n" + (text or "")).strip()
+    source = (text or "").strip()
+    # The technical report is contractually sectioned.  Preserve everything from
+    # section 1 onward and replace any duplicated/placeholder preamble.
+    m = re.search(r"(?im)^\s*(?:#+\s*)?1\.\s*RESUMO EXECUTIVO\s*$", source)
+    if m:
+        body = source[m.start():].lstrip()
+        return (block + "\n\n" + body).strip()
 
+    # Defensive fallback for unusual output: remove every short decision block.
+    pattern = re.compile(
+        r"(?ims)^\s*(?:#+\s*)?DECISÃO PRELIMINAR\s*$.*?(?=^\s*(?:#+\s*)?(?:DECISÃO PRELIMINAR|\d+\.|RESUMO EXECUTIVO|IDENTIFICAÇÃO|DOCUMENTAÇÃO|ENQUADRAMENTO)|\Z)"
+    )
+    body = pattern.sub("", source).strip()
+    return (block + "\n\n" + body).strip()
 
 def build_executive_summary(analysis_text: str) -> dict:
     """Create a small structured view model for the Module 4 cards.

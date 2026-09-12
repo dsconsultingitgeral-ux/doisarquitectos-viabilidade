@@ -502,11 +502,20 @@ elif step == 2:
     if files:
         st.success(f"{len(files)} documento(s) pronto(s) para análise.")
         rows = []
+        project_names = []
+        project_tokens = ("estudo", "proposta", "pip", "arquitect", "arquitet", "arq_", "pecas desenhadas", "peças desenhadas")
         for f in files:
             ext = Path(f.name).suffix.lower().replace(".", "").upper() or "FICHEIRO"
             size_mb = len(f.getvalue()) / (1024 * 1024)
             rows.append({"Documento": f.name, "Tipo": ext, "Tamanho": f"{size_mb:.2f} MB"})
+            normalized_name = unicodedata.normalize("NFKD", f.name.lower()).encode("ascii", "ignore").decode("ascii")
+            if any(tok in normalized_name for tok in project_tokens):
+                project_names.append(f.name)
         st.dataframe(rows, use_container_width=True, hide_index=True)
+        if project_names:
+            st.info("Proposta / estudo / PIP identificado para confronto: **" + ", ".join(project_names) + "**")
+        else:
+            st.warning("Não foi identificado pelo nome nenhum ficheiro de proposta, estudo prévio ou PIP. Se existir um projeto dos arquitetos, anexe-o antes de iniciar a análise para evitar um relatório genérico do terreno.")
     else:
         st.info("Pode avançar sem documentos; nesse caso a análise ficará limitada ao que for possível confirmar por fontes oficiais.")
 
@@ -626,7 +635,7 @@ elif step == 3:
 # 04 — POTENCIAL / RELATÓRIO
 # ------------------------------------------------------------
 elif step == 4:
-    header("Potencial do terreno", "Síntese objetiva dos principais parâmetros e do potencial identificado.")
+    header("Síntese do estudo", "Resultado executivo e fundamentação técnica do processo analisado.")
 
     text = st.session_state.analysis_text
     if not text:
