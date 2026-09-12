@@ -684,9 +684,21 @@ elif step == 4:
 
     st.write("")
     row2 = st.columns(3, gap="small")
-    with row2[0]: metric_card("Implantação", implantation, "quando determinada")
-    with row2[1]: metric_card("Pisos", floors, "limite / cenário")
+    with row2[0]: metric_card("Implantação", implantation, "cenário recomendado / valor confirmado")
+    with row2[1]: metric_card("Pisos", floors, "regra aplicável por tipologia")
     with row2[2]: metric_card("Evidência", evidence, "estado da fundamentação")
+
+    # Potencial complementar: usa apenas valores já existentes no mesmo relatório.
+    # Não faz nova chamada à IA nem recalcula parâmetros.
+    abc = _card_value(summary, "abc", "")
+    units = _card_value(summary, "units", "")
+    main_constraint = _card_value(summary, "main_constraint", "")
+    if abc or units or main_constraint:
+        st.write("")
+        row3 = st.columns(3, gap="small")
+        with row3[0]: metric_card("ABC", abc or "A confirmar", "área bruta acima do solo")
+        with row3[1]: metric_card("Potencial", units or "A confirmar", "fogos / capacidade indicativa")
+        with row3[2]: metric_card("Condicionante principal", main_constraint or "A confirmar", "validação prioritária")
 
     st.write("")
     tabs = st.tabs(["Análise técnica", "Fontes", "Relatório PDF"])

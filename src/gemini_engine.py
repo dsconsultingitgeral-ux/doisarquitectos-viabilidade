@@ -373,68 +373,222 @@ def _has_citation(value: str) -> bool:
 
 def _without_citations(value: str) -> str:
     value = re.sub(r"\s*\[\d+(?:\s*[,;]\s*\d+)*\]", "", value or "")
+    value = re.sub(r"\s*[,;]\s*[,;]+\s*", ", ", value)
+    value = re.sub(r"[\s,;:-]+$", "", value.strip())
     return _short_value(value)
 
 
-def build_canonical_facts(analysis_text: str, sources: list[SourceLink] | None = None) -> dict:
-    """Build conservative dashboard facts from the same final report.
+def build_canonical_facts(
+    analysis_text: str,
+    sources: list[SourceLink] | None = None,
+    has_documents: bool = False,
+) -> dict:
+    """Build the Module 4 facts from the *whole final report*.
 
-    Critical regulatory values are shown only when they are single-valued and the
-    report line carries a citation while real grounding sources were captured. If that
-    evidence is missing, the UI says A confirmar instead of presenting model inference
-    as a regulation.
+    V6.3 previously trusted only the short ``DECISÃO PRELIMINAR`` block and
+    required Google-grounding links before exposing numeric values.  In real
+    jobs this produced an empty dashboard even when the technical body already
+    contained document-backed conclusions (area, EH1, floors, scenarios, etc.).
+
+    This extractor therefore follows a strict hierarchy:
+      1) concrete value in the executive block;
+      2) explicit conclusion/parameter in the technical body;
+      3) explicit recommended scenario value;
+      4) otherwise ``A confirmar``.
+
+    It never invents a value.  Scenario estimates may legitimately be ranges;
+    regulatory maxima are only shown when their context is unambiguous.
     """
-    block = _decision_block(analysis_text) or (analysis_text or "")
+    text = analysis_text or ""
+    block = _decision_block(text) or ""
     sources = sources or []
-    has_grounded_sources = bool(sources)
 
-    raw_implantation = _line_value_raw(block, ("IMPLANTAÇÃO", "IMPLANTACAO"))
-    raw_floors = _line_value_raw(block, ("PISOS",))
+    def concrete(value: str) -> str:
+        v = _without_citations(value)
+        vu = v.upper()
+        if not v or vu in {"A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO"}:
+            return ""
+        if "A CONFIRMAR" in vu or "A VALIDAR" in vu:
+            return ""
+        return v
 
-    def critical_value(raw: str) -> str:
-        if not raw or _has_numeric_range(raw):
-            return "A confirmar"
-        if re.search(r"\d", raw) and (not has_grounded_sources or not _has_citation(raw)):
-            return "A confirmar"
-        return _without_citations(raw)
+    def first_match(patterns: tuple[str, ...], max_len: int = 180) -> str:
+        for pattern in patterns:
+            m = re.search(pattern, text, flags=re.I | re.M | re.S)
+            if m:
+                value = re.sub(r"\s+", " ", m.group(1)).strip(" .;:-\n\t")
+                value = _without_citations(value)
+                if value:
+                    vu = value.upper()
+                    if vu in {"A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO"}:
+                        continue
+                    if vu.startswith("A CONFIRMAR") or vu.startswith("A VALIDAR"):
+                        continue
+                    return value[:max_len]
+        return ""
 
-    implantation = critical_value(raw_implantation)
-    floors = critical_value(raw_floors)
+    scenario_b = ""
+    m_scenario_b = re.search(
+        r"(?is)Cenário\s+B\b(.*?)(?=Cenário\s+C\b|\n\s*8\.|\Z)",
+        text,
+    )
+    if m_scenario_b:
+        scenario_b = m_scenario_b.group(1)
 
-    classification_raw = _line_value_raw(block, ("CLASSIFICAÇÃO", "CLASSIFICACAO"))
-    use_raw = _line_value_raw(block, ("MELHOR APROVEITAMENTO", "USO RECOMENDADO"))
+    def scenario_b_value(label_pattern: str, max_len: int = 140) -> str:
+        if not scenario_b:
+            return ""
+        m = re.search(label_pattern, scenario_b, flags=re.I | re.M)
+        if not m:
+            return ""
+        value = re.sub(r"\s+", " ", m.group(1)).strip(" .;:-\n\t")
+        value = _without_citations(value)
+        return value[:max_len] if value else ""
 
-    # Classification/use are still allowed as descriptive values when no numeric rule is
-    # asserted, but the evidence badge remains A VALIDAR if grounding was not captured.
+    # ---- Viability -----------------------------------------------------
+    viability = concrete(_line_value_raw(block, ("VIABILIDADE",)))
+    if not viability:
+        viability = first_match((
+            r"(?im)^\s*(?:[-•\x7f]\s*)?ESTADO\s*:\s*([^\n]+)",
+            r"(?i)\bviabilidade(?:\s+do\s+aproveitamento)?\s+(?:é|:)\s*([^\n.]+)",
+            r"(?i)\b(FAVORÁVEL\s+COM\s+CONDICIONANTES|FAVORÁVEL|DESFAVORÁVEL)\b",
+        )) or "A confirmar"
+
+    # ---- Area ----------------------------------------------------------
+    area = concrete(_line_value_raw(block, ("ÁREA IDENTIFICADA", "AREA IDENTIFICADA", "ÁREA", "AREA")))
+    if not area:
+        area = first_match((
+            r"(?im)^\s*(?:[-•\x7f]\s*)?(?:ÁREA DO PROJETO\s*/\s*ÁREA JURÍDICA|AREA DO PROJETO\s*/\s*AREA JURIDICA)\s*:\s*(?:Levantamento Topográfico\s*:\s*)?([0-9][0-9 .,'’]*\s*m²)",
+            r"(?im)^\s*(?:Área do Levantamento|AREA DO LEVANTAMENTO)\s+([0-9][0-9 .,'’]*\s*m²)",
+            r"(?i)\bárea\s+(?:total\s+)?(?:levantada|do levantamento)[^\d]{0,50}([0-9][0-9 .,'’]*\s*m²)",
+            r"(?i)\b([0-9][0-9 .,'’]*\s*m²)\s*\(polígono\s+global",
+        ), max_len=80) or "A confirmar"
+
+    # ---- Classification ------------------------------------------------
+    classification = concrete(_line_value_raw(block, ("CLASSIFICAÇÃO", "CLASSIFICACAO")))
+    if not classification:
+        classification = first_match((
+            r"(?im)^\s*(?:[-•\x7f]\s*)?CLASSIFICAÇÃO(?:\s+E\s+QUALIFICAÇÃO\s+DO\s+SOLO)?\s*:\s*([^\n]+)",
+            r"(?i)\bsolo\s+está\s+classificado\s+como\s+([^\n.]+)",
+            r"(?i)\b(Solo\s+Urbano\s*[—-]\s*Espaços\s+Habitacionais\s+Tipo\s*\d+(?:\s*\([^)]*\))?)",
+        )) or "A confirmar"
+
+    # ---- Recommended use ----------------------------------------------
+    recommended_use = concrete(_line_value_raw(block, ("MELHOR APROVEITAMENTO", "USO RECOMENDADO")))
+    if not recommended_use:
+        recommended_use = scenario_b_value(
+            r"(?:[-•\x7f]\s*)?Tipologia\s*:\s*([^\n]+)",
+            max_len=150,
+        ) or first_match((
+            r"(?i)\baproveitamento\s+ótimo\s+passa\s+por\s+([^\n.]+)",
+        ))
+        if recommended_use == "RECOMENDADO":
+            recommended_use = ""
+    if not recommended_use:
+        # Last safe fallback: dominant/admissible use, clearly marked as such.
+        dominant = first_match((
+            r"(?im)^\s*(?:[-•\x7f]\s*)?Uso\s+Dominante\s+([^\n]+)",
+            r"(?im)^\s*(?:[-•\x7f]\s*)?Usos\s+Admissíveis\s*:\s*([^\n]+)",
+        ))
+        recommended_use = dominant or "A confirmar"
+
+    # ---- Implantation --------------------------------------------------
+    implantation = concrete(_line_value_raw(block, ("IMPLANTAÇÃO", "IMPLANTACAO")))
+    if not implantation:
+        # Prefer the recommended scenario. A range here is an estimate, not a
+        # falsely claimed regulatory maximum, so it is useful and honest.
+        implantation = scenario_b_value(
+            r"Área\s+de\s+Implantação\s+Estimada[^:]*:\s*([^\n]+)",
+            max_len=110,
+        ) or first_match((
+            r"(?im)^\s*(?:[-•\x7f]\s*)?IMPLANTAÇÃO\s+PROPOSTA\s*/\s*MÁXIMA\s*:\s*([^\n]+)",
+            r"(?im)^\s*(?:[-•\x7f]\s*)?Área\s+de\s+Implantação\s+Estimada[^:]*:\s*([^\n]+)",
+        ), max_len=110)
+        # A conclusion such as "A CONFIRMAR em PIP (faixa ... 1600–2250)" is
+        # not a confirmed maximum. Do not surface the A CONFIRMAR wrapper.
+        if "A CONFIRMAR" in implantation.upper():
+            paren = re.search(r"\(([^)]*\d[^)]*)\)", implantation)
+            implantation = (paren.group(1).strip() + " (estimativa)") if paren else ""
+    implantation = implantation or "A confirmar"
+
+    # ---- Floors --------------------------------------------------------
+    floors = concrete(_line_value_raw(block, ("PISOS",)))
+    if not floors:
+        # Preserve the distinct rules instead of collapsing them into a bogus range.
+        multi = first_match((
+            r"(?i)(?:Máximo\s+de\s+)?(\d+\s+pisos?)\s*\([^)]*\)\s*para\s+edifícios\s+multifamiliares",
+            r"(?i)multifamiliar[^\n]{0,80}?máximo\s+de\s+(\d+\s+pisos?)",
+            r"(?i)Máximo\s+regulamentar\s+de\s+(\d+\s+pisos?)\s+acima\s+do\s+solo",
+        ), max_len=40)
+        uni = first_match((
+            r"(?i)(?:Máximo\s+de\s+)?(\d+\s+pisos?)\s+para\s+moradias\s+unifamiliares",
+            r"(?i)\((\d+\s+pisos?)\s+se\s+moradias\s+unifamiliares\)",
+        ), max_len=40)
+        if multi and uni and multi != uni:
+            floors = f"{multi} multifamiliar / {uni} unifamiliar"
+        elif multi:
+            floors = multi
+        else:
+            floors = first_match((
+                r"(?im)^\s*(?:[-•\x7f]\s*)?PISOS\s+PROPOSTOS\s*/\s*REGRA\s*:\s*([^\n]+)",
+                r"(?im)^\s*(?:[-•\x7f]\s*)?Pisoss?\s+Acima\s+do\s+Solo\s+([^\n]+)",
+            ), max_len=120)
+    floors = floors or "A confirmar"
+
+    # ---- Extra potential values (used by the UI when available) -------
+    abc = scenario_b_value(
+        r"ABC\s+Acima\s+do\s+Solo\s+Estimada\s*:\s*([^\n]+)",
+        max_len=100,
+    ) or first_match((
+        r"(?im)^\s*(?:[-•\x7f]\s*)?ABC\s+PROPOSTA\s*/\s*MÁXIMA\s*:\s*([^\n]+)",
+    ), max_len=100) or "A confirmar"
+    units = scenario_b_value(
+        r"Potencial\s+de\s+Habitação\s*:\s*([^\n]+)",
+        max_len=100,
+    ) or first_match((
+        r"(?im)^\s*(?:[-•\x7f]\s*)?FOGOS\s*/\s*TIPOLOGIAS\s*:\s*([^\n]+)",
+    ), max_len=100) or "A confirmar"
+    constraint = first_match((
+        r"(?im)^\s*(?:[-•\x7f]\s*)?PRINCIPAL\s+CONDICIONANTE\s*:\s*([^\n]+)",
+    ), max_len=140) or "A confirmar"
+
+    # Evidence from uploaded official/technical documents is valid evidence too;
+    # V6.3 incorrectly counted only Google Search grounding URLs.
+    has_citations = bool(re.search(r"\[\d+(?:\s*[,;]\s*\d+)*\]", text))
+    if has_documents and has_citations:
+        evidence_status = "DOCUMENTADO"
+    elif sources and has_citations:
+        evidence_status = "REFERENCIADO"
+    elif has_citations:
+        evidence_status = "REFERENCIADO"
+    else:
+        evidence_status = "A VALIDAR"
+
     facts = {
-        "validated_location": _without_citations(_line_value_raw(block, ("LOCALIZAÇÃO", "LOCALIZACAO"))),
-        "viability": _without_citations(_line_value_raw(block, ("VIABILIDADE",))),
-        "area": _without_citations(_line_value_raw(block, ("ÁREA IDENTIFICADA", "AREA IDENTIFICADA", "ÁREA", "AREA"))),
-        "classification": _without_citations(classification_raw),
-        "recommended_use": _without_citations(use_raw),
+        "validated_location": concrete(_line_value_raw(block, ("LOCALIZAÇÃO", "LOCALIZACAO"))),
+        "viability": viability,
+        "area": area,
+        "classification": classification,
+        "recommended_use": recommended_use,
         "implantation": implantation,
         "implantation_status": _status_from_value(implantation),
-        "implantation_evidence": "Linha executiva citada + fontes grounded" if implantation != "A confirmar" else "Evidência insuficiente",
+        "implantation_evidence": "Extraído do cenário/conclusão do mesmo relatório" if implantation != "A confirmar" else "Evidência insuficiente",
         "floors": floors,
         "floors_status": _status_from_value(floors),
-        "floors_evidence": "Linha executiva citada + fontes grounded" if floors != "A confirmar" else "Evidência insuficiente",
+        "floors_evidence": "Extraído dos parâmetros regulamentares do mesmo relatório" if floors != "A confirmar" else "Evidência insuficiente",
+        "abc": abc,
+        "units": units,
+        "main_constraint": constraint,
         "height": "A confirmar",
         "height_status": "NÃO DETERMINADO",
         "utilization_index": "A confirmar",
         "utilization_index_status": "NÃO DETERMINADO",
         "impermeability": "A confirmar",
         "impermeability_status": "NÃO DETERMINADO",
-        "evidence_status": "REFERENCIADO" if has_grounded_sources else "A VALIDAR",
+        "evidence_status": evidence_status,
         "notes": [],
     }
 
-    if implantation == "A confirmar" or floors == "A confirmar":
-        facts["evidence_status"] = "A VALIDAR"
-        facts["notes"].append("Pelo menos um parâmetro regulamentar crítico não ficou sustentado por valor único + citação + fonte grounded.")
-
-    for k in ("validated_location", "viability", "area", "classification", "recommended_use"):
-        if not facts[k] or facts[k] in {"—", "-"}:
-            facts[k] = "" if k == "validated_location" else "A confirmar"
     return facts
 
 def _replace_decision_block(text: str, facts: dict) -> str:
@@ -838,7 +992,7 @@ def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
     response_id = getattr(response, "response_id", None) or getattr(response, "id", None) or ""
 
     # Zero API calls: UI and PDF consume exactly the same completed report.
-    summary = build_canonical_facts(final_text, sources=sources)
+    summary = build_canonical_facts(final_text, sources=sources, has_documents=bool(uploaded_files))
     final_text = _replace_decision_block(final_text, summary)
     return final_text, sources, str(response_id), summary
 
