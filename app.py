@@ -75,13 +75,23 @@ def clean_analysis_display(text: str) -> str:
 
 
 def _card_value(summary: dict, key: str, fallback: str = "A confirmar") -> str:
+    """Return a concrete card value, never letting placeholder text mask a better fallback."""
     value = (summary or {}).get(key)
     if value is None:
         return fallback
     value = str(value).strip()
     if not value or value in {"—", "-", "None", "null"}:
         return fallback
+    if value.upper() in {"A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO"}:
+        return fallback
     return value
+
+
+def _is_concrete_card(value: str) -> bool:
+    value = str(value or "").strip()
+    return bool(value) and value.upper() not in {
+        "A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO", "—", "-"
+    }
 
 
 def _clean_confidence(value: str) -> str:
@@ -660,8 +670,12 @@ elif step == 4:
     area = _card_value(summary, "area", extract_label(text, ["ÁREA IDENTIFICADA", "ÁREA CONSIDERADA", "ÁREA"], "A confirmar"))
     classification = _card_value(summary, "classification", extract_label(text, ["CLASSIFICAÇÃO", "CATEGORIA / SUBCATEGORIA", "CATEGORIA"], "A confirmar"))
     use = _card_value(summary, "recommended_use", extract_label(text, ["MELHOR APROVEITAMENTO", "USO MAIS INTERESSANTE", "USO RECOMENDADO"], "A confirmar"))
-    implantation = _card_value(summary, "implantation", extract_label(text, ["IMPLANTAÇÃO", "IMPLANTAÇÃO MÁXIMA"], "A confirmar"))
-    floors = _card_value(summary, "floors", extract_label(text, ["PISOS", "NÚMERO MÁXIMO DE PISOS"], "A confirmar"))
+    implantation = _card_value(summary, "implantation", extract_label(text, ["IMPLANTAÇÃO", "IMPLANTAÇÃO MÁXIMA"], ""))
+    floors = _card_value(summary, "floors", extract_label(text, ["PISOS", "NÚMERO MÁXIMO DE PISOS"], ""))
+    if not _is_concrete_card(implantation):
+        implantation = "Sem máximo confirmado"
+    if not _is_concrete_card(floors):
+        floors = "Sem máximo confirmado"
     evidence = _card_value(summary, "evidence_status", "A validar")
 
     status_class = "da-status-good"
@@ -693,12 +707,19 @@ elif step == 4:
     abc = _card_value(summary, "abc", "")
     units = _card_value(summary, "units", "")
     main_constraint = _card_value(summary, "main_constraint", "")
-    if abc or units or main_constraint:
+    extras = [("ABC", abc, "área bruta acima do solo"),
+              ("Potencial", units, "fogos / capacidade indicativa"),
+              ("Condicionante principal", main_constraint, "validação prioritária")]
+    extras = [item for item in extras if _is_concrete_card(item[1])]
+    if extras:
         st.write("")
-        row3 = st.columns(3, gap="small")
-        with row3[0]: metric_card("ABC", abc or "A confirmar", "área bruta acima do solo")
-        with row3[1]: metric_card("Potencial", units or "A confirmar", "fogos / capacidade indicativa")
-        with row3[2]: metric_card("Condicionante principal", main_constraint or "A confirmar", "validação prioritária")
+        row3 = st.columns(len(extras), gap="small")
+        for col, (label, value, caption) in zip(row3, extras):
+            with col:
+                metric_card(label, value, caption)
+
+    if not _is_concrete_card(abc) and not _is_concrete_card(units):
+        st.caption("ABC e número de fogos só são mostrados quando existe base documental ou cálculo tecnicamente sustentado; a aplicação não inventa capacidade.")
 
     st.write("")
     tabs = st.tabs(["Análise técnica", "Fontes", "Relatório PDF"])

@@ -474,8 +474,17 @@ def build_canonical_facts(
         )) or "A confirmar"
 
     # ---- Recommended use ----------------------------------------------
-    recommended_use = concrete(_line_value_raw(block, ("MELHOR APROVEITAMENTO", "USO RECOMENDADO")))
-    if not recommended_use:
+    # If there is no architectural proposal, prefer an objectively supported
+    # admissible/dominant use from the regulatory body over a speculative
+    # "best use" invented in the executive block.
+    no_project = bool(re.search(
+        r"(?i)(não foi anexada proposta arquitetónica|sem proposta arquitetónica anexada|inexistência de proposta de arquitetura)",
+        text,
+    ))
+    recommended_use = "" if no_project else concrete(
+        _line_value_raw(block, ("MELHOR APROVEITAMENTO", "USO RECOMENDADO"))
+    )
+    if not recommended_use and not no_project:
         recommended_use = scenario_b_value(
             r"(?:[-•\x7f]\s*)?Tipologia\s*:\s*([^\n]+)",
             max_len=150,
@@ -485,12 +494,17 @@ def build_canonical_facts(
         if recommended_use == "RECOMENDADO":
             recommended_use = ""
     if not recommended_use:
-        # Last safe fallback: dominant/admissible use, clearly marked as such.
         dominant = first_match((
-            r"(?im)^\s*(?:[-•\x7f]\s*)?Uso\s+Dominante\s+([^\n]+)",
-            r"(?im)^\s*(?:[-•\x7f]\s*)?Usos\s+Admissíveis\s*:\s*([^\n]+)",
-        ))
-        recommended_use = dominant or "A confirmar"
+            r"(?is)Uso\s+Dominante\s*(?:\||:)?\s*(Habitação(?:\s*\([^)]*\))?)",
+            r"(?is)Usos\s+Admissíveis\s*:\s*([^\n]+)",
+            r"(?is)admitindo\s+(edificação\s+plurifamiliar\s+e\s+mista)",
+        ), max_len=120)
+        if dominant:
+            recommended_use = dominant
+        elif "ESPAÇOS HABITACIONAIS" in classification.upper():
+            recommended_use = "Habitação (uso dominante)"
+        else:
+            recommended_use = "A confirmar"
 
     # ---- Implantation --------------------------------------------------
     implantation = concrete(_line_value_raw(block, ("IMPLANTAÇÃO", "IMPLANTACAO")))
@@ -514,24 +528,30 @@ def build_canonical_facts(
     # ---- Floors --------------------------------------------------------
     floors = concrete(_line_value_raw(block, ("PISOS",)))
     if not floors:
-        # Preserve the distinct rules instead of collapsing them into a bogus range.
+        # Search the full technical body, including markdown/plain-text tables
+        # where the label and value can be separated by line breaks.
         multi = first_match((
+            r"(?is)Número\s+de\s+Pisos\s*\(Plurifamiliar\s*/\s*Misto\).*?Máximo\s+de\s+(\d+\s+pisos?)",
+            r"(?is)Pisos?\s+Acima\s+do\s+Solo.*?Máximo\s+de\s+(\d+\s+pisos?).*?(?:multifamiliares?|misto|comércio)",
             r"(?i)(?:Máximo\s+de\s+)?(\d+\s+pisos?)\s*\([^)]*\)\s*para\s+edifícios\s+multifamiliares",
-            r"(?i)multifamiliar[^\n]{0,80}?máximo\s+de\s+(\d+\s+pisos?)",
+            r"(?i)multifamiliar[^\n]{0,120}?máximo\s+de\s+(\d+\s+pisos?)",
             r"(?i)Máximo\s+regulamentar\s+de\s+(\d+\s+pisos?)\s+acima\s+do\s+solo",
+            r"(?is)admitindo\s+edificação\s+plurifamiliar\s+e\s+mista\s+até\s+(\d+\s+pisos?)",
         ), max_len=40)
         uni = first_match((
+            r"(?is)Número\s+de\s+Pisos\s*\(Moradias\s+Unifamiliares\).*?Máximo\s+de\s+(\d+\s+pisos?)",
             r"(?i)(?:Máximo\s+de\s+)?(\d+\s+pisos?)\s+para\s+moradias\s+unifamiliares",
             r"(?i)\((\d+\s+pisos?)\s+se\s+moradias\s+unifamiliares\)",
         ), max_len=40)
         if multi and uni and multi != uni:
-            floors = f"{multi} multifamiliar / {uni} unifamiliar"
+            floors = f"{multi} plurifamiliar/misto · {uni} unifamiliar"
         elif multi:
             floors = multi
+        elif uni:
+            floors = uni
         else:
             floors = first_match((
                 r"(?im)^\s*(?:[-•\x7f]\s*)?PISOS\s+PROPOSTOS\s*/\s*REGRA\s*:\s*([^\n]+)",
-                r"(?im)^\s*(?:[-•\x7f]\s*)?Pisoss?\s+Acima\s+do\s+Solo\s+([^\n]+)",
             ), max_len=120)
     floors = floors or "A confirmar"
 
@@ -541,16 +561,30 @@ def build_canonical_facts(
         max_len=100,
     ) or first_match((
         r"(?im)^\s*(?:[-•\x7f]\s*)?ABC\s+PROPOSTA\s*/\s*MÁXIMA\s*:\s*([^\n]+)",
-    ), max_len=100) or "A confirmar"
+    ), max_len=100)
     units = scenario_b_value(
         r"Potencial\s+de\s+Habitação\s*:\s*([^\n]+)",
         max_len=100,
     ) or first_match((
         r"(?im)^\s*(?:[-•\x7f]\s*)?FOGOS\s*/\s*TIPOLOGIAS\s*:\s*([^\n]+)",
-    ), max_len=100) or "A confirmar"
+    ), max_len=100)
+
+    # "Sem proposta" and strings that still contain A CONFIRMAR are not
+    # usable capacity outputs. They must not create empty-looking dashboard cards.
+    if abc and ("A CONFIRMAR" in abc.upper() or "SEM PROPOSTA" in abc.upper()):
+        abc = ""
+    if units and ("A CONFIRMAR" in units.upper() or "SEM PROPOSTA" in units.upper()):
+        units = ""
+
     constraint = first_match((
-        r"(?im)^\s*(?:[-•\x7f]\s*)?PRINCIPAL\s+CONDICIONANTE\s*:\s*([^\n]+)",
-    ), max_len=140) or "A confirmar"
+        r"(?im)^\s*(?:[-•\x7f]\s*)?PRINCIPAL(?:ES)?\s+CONDICIONANTE(?:S)?\s*:\s*([^\n]+)",
+        r"(?i)principal\s+condicionante\s+identificada\s+é\s+([^\n.]+)",
+        r"(?is)Património\s+Cultural\s*[—-]\s*Zona\s+Geral\s*/\s*Especial\s+de\s+Proteção\s*\(ZGP\s*/\s*ZEP\)",
+    ), max_len=140)
+    if (not constraint or len(constraint) < 45 or re.search(r"\bde$", constraint, re.I)) and re.search(
+        r"(?i)ZGP\s*/\s*ZEP|Zona\s+(?:Geral|Especial)\s+de\s+Proteção", text
+    ):
+        constraint = "ZGP/ZEP — património cultural; parecer da entidade competente"
 
     # Evidence from uploaded official/technical documents is valid evidence too;
     # V6.3 incorrectly counted only Google Search grounding URLs.
@@ -586,7 +620,7 @@ def build_canonical_facts(
         "impermeability": "A confirmar",
         "impermeability_status": "NÃO DETERMINADO",
         "evidence_status": evidence_status,
-        "notes": [],
+        "notes": (["Sem proposta arquitetónica: ABC/fogos só são apresentados quando existe base documental suficiente."] if no_project else []),
     }
 
     return facts
@@ -601,15 +635,21 @@ def _replace_decision_block(text: str, facts: dict) -> str:
     if not facts:
         return text
 
+    def executive_value(key: str, missing: str = "Não apurado com os documentos disponíveis") -> str:
+        value = _short_value(facts.get(key), "")
+        if value.upper() in {"A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO"}:
+            return missing
+        return value or missing
+
     block = "\n".join([
         "DECISÃO PRELIMINAR",
-        f"VIABILIDADE: {_short_value(facts.get('viability'))}",
-        f"MELHOR APROVEITAMENTO: {_short_value(facts.get('recommended_use'))}",
-        f"ÁREA IDENTIFICADA: {_short_value(facts.get('area'))}",
-        f"CLASSIFICAÇÃO: {_short_value(facts.get('classification'))}",
-        f"IMPLANTAÇÃO: {_short_value(facts.get('implantation'))}",
-        f"PISOS: {_short_value(facts.get('floors'))}",
-        f"EVIDÊNCIA: {_short_value(facts.get('evidence_status'), 'NÃO DETERMINADO')}",
+        f"VIABILIDADE: {executive_value('viability')}",
+        f"MELHOR APROVEITAMENTO: {executive_value('recommended_use')}",
+        f"ÁREA IDENTIFICADA: {executive_value('area')}",
+        f"CLASSIFICAÇÃO: {executive_value('classification')}",
+        f"IMPLANTAÇÃO: {executive_value('implantation', 'Sem máximo numérico confirmado')}",
+        f"PISOS: {executive_value('floors', 'Sem máximo numérico confirmado')}",
+        f"EVIDÊNCIA: {executive_value('evidence_status', 'A validar')}",
     ])
 
     source = (text or "").strip()

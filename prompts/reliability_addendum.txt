@@ -129,3 +129,13 @@ Esta regra prevalece sobre qualquer instrução anterior que incentive intervalo
 - O bloco DECISÃO PRELIMINAR e a secção PARÂMETROS URBANÍSTICOS têm de repetir exatamente os mesmos máximos regulamentares.
 - Antes de terminar, verifica literalmente que o valor de PISOS e o valor de IMPLANTAÇÃO são idênticos em todas as secções onde são apresentados como regra do terreno.
 - Se não houver evidência oficial suficiente: A CONFIRMAR é obrigatório e é preferível a uma estimativa.
+
+============================================================
+V6.5 — SÍNTESE EXECUTIVA SEM PLACEHOLDERS ENGANADORES
+============================================================
+- O bloco DECISÃO PRELIMINAR é uma síntese do corpo técnico, nunca uma fonte independente.
+- Antes de escrever "A CONFIRMAR" em PISOS, procura obrigatoriamente a regra confirmada na secção 6 e no texto oficial pesquisado. Se o corpo contém "Máximo de 3 pisos" para o regime aplicável, o bloco inicial deve repetir 3 pisos.
+- Antes de escrever "A CONFIRMAR" em CONDICIONANTE PRINCIPAL, reutiliza a condicionante documental já identificada na secção 8.
+- Sem projeto/proposta anexada, não inventar ABC, fogos ou implantação de projeto. Nesses casos, omitir capacidade numérica sem base e explicar qual parâmetro falta.
+- Sem proposta, MELHOR APROVEITAMENTO não pode ser uma tipologia especulativa apresentada como facto. Preferir o uso dominante/admissível documentalmente suportado e marcar qualquer cenário como CENÁRIO.
+- O dashboard e o PDF têm de derivar do mesmo relatório final e repetir os mesmos valores concretos.
