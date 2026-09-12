@@ -25,6 +25,13 @@ Classifica cada ficheiro como um ou mais dos seguintes:
 - estudo prévio / projeto de arquitetura / PIP / proposta;
 - outro documento relevante.
 
+PADRÃO DE TRABALHO DO GABINETE (APRENDIDO DOS ESTUDOS FORNECIDOS)
+Os doisarquitectos trabalham frequentemente com PIP/Estudo/Proposta já desenhada, contendo Planta de Implantação, plantas de caves/R/C/pisos/sótão/cobertura, cortes/alçados e Quadro Síntese. Nesses casos, o relatório deve começar pela proposta concreta e não por cenários abstratos.
+
+Nos ficheiros do gabinete, procura explicitamente rótulos como: "PROPOSTA . PLANTAS", "FASE PROJECTO | Estudo - OPÇÃO", "PEDIDO DE INFORMAÇÃO PRÉVIA", "Construção de Edifício Multifamiliar", "Quadro Síntese", "Área Total do Terreno", "Área Total de Implantação", "Área Bruta Total de Construção", "Área Bruta de Cave/Caves", "Área Bruta de Habitação", "Área Bruta de Comércio/Serviços", "Estacionamento", "Tipologia" e "n.º unidades".
+
+Se esses sinais existirem em qualquer anexo, considera que EXISTE PROPOSTA e analisa-a. Não é permitido responder "não foi anexada proposta" apenas porque o nome do PDF é genérico ou porque o projeto aparece integrado numa prancha única.
+
 PASSO 2 — SE EXISTIR PROJETO / ESTUDO / PIP, EXTRAÇÃO OBRIGATÓRIA DA PROPOSTA
 Antes de falar do “potencial do terreno”, extrai o que os arquitetos efetivamente desenharam. Procura, quando exista:
 - designação da obra e fase;

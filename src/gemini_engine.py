@@ -625,6 +625,111 @@ def _enforce_client_maximum_rules(text: str) -> str:
     return "\n".join(out).strip()
 
 
+
+
+def _local_document_manifest(files: Iterable[Any]) -> tuple[str, bool]:
+    """Build a deterministic document index before Gemini analysis.
+
+    This does not replace visual/PDF analysis. It guarantees that every uploaded
+    filename and any machine-readable project signals are explicitly present in
+    the model context, preventing an architectural study from being silently
+    ignored when several PDFs are uploaded together.
+    """
+    entries = []
+    project_candidate = False
+
+    for idx, f in enumerate(list(files), 1):
+        name = getattr(f, "name", f"documento_{idx}")
+        suffix = Path(name).suffix.lower()
+        raw = f.getvalue()
+        text = ""
+
+        try:
+            if suffix == ".pdf":
+                from io import BytesIO
+                from pypdf import PdfReader
+                reader = PdfReader(BytesIO(raw))
+                chunks = []
+                for page_no, page in enumerate(reader.pages[:20], 1):
+                    try:
+                        t = page.extract_text() or ""
+                    except Exception:
+                        t = ""
+                    if t.strip():
+                        chunks.append(f"[p.{page_no}] {t}")
+                    if sum(len(x) for x in chunks) >= 18000:
+                        break
+                text = "\n".join(chunks)[:18000]
+            elif suffix == ".txt":
+                text = raw.decode("utf-8", errors="ignore")[:18000]
+            elif suffix == ".docx":
+                try:
+                    from io import BytesIO
+                    from docx import Document
+                    doc = Document(BytesIO(raw))
+                    text = "\n".join(p.text for p in doc.paragraphs)[:18000]
+                except Exception:
+                    text = ""
+        except Exception as exc:
+            logger.info("Local text extraction unavailable for %s: %s", name, exc)
+
+        normalized = re.sub(r"\s+", " ", text).upper()
+        project_signals = (
+            "PROJECTO DE ARQUITECTURA", "PROJETO DE ARQUITETURA",
+            "FASE PROJECTO", "FASE PROJETO", "ESTUDO - OPÇÃO",
+            "ESTUDO - OPCAO", "PROPOSTA . PLANTAS",
+            "PLANTA DE IMPLANTAÇÃO", "PLANTA DE IMPLANTACAO",
+            "CONSTRUÇÃO DE EDIFÍCIOS", "CONSTRUCAO DE EDIFICIOS",
+            "HABITAÇÃO MULTIFAMILIAR", "HABITACAO MULTIFAMILIAR",
+            "PEDIDO DE INFORMAÇÃO PRÉVIA", "PEDIDO DE INFORMACAO PREVIA",
+        )
+        is_project = any(sig in normalized for sig in project_signals)
+        if is_project:
+            project_candidate = True
+            kind = "PROJETO/ESTUDO/PIP CANDIDATO — analisar obrigatoriamente como proposta arquitetónica"
+        elif any(sig in normalized for sig in ("LEVANTAMENTO TOPOGRÁFICO", "LEVANTAMENTO TOPOGRAFICO", "COTAS")):
+            kind = "LEVANTAMENTO/TOPOGRAFIA CANDIDATO"
+        elif any(sig in normalized for sig in ("PLANTA DE ORDENAMENTO", "PLANTA DE CONDICIONANTES", "CARTOGRAFIA ESCALA", "PDM")):
+            kind = "CARTOGRAFIA/PDM CANDIDATO"
+        else:
+            kind = "DOCUMENTO A CLASSIFICAR PELO MODELO"
+
+        excerpt = re.sub(r"\n{3,}", "\n\n", text).strip()
+        if not excerpt:
+            excerpt = "[Sem texto extraível localmente; ler visualmente o ficheiro anexado.]"
+
+        entries.append(
+            f"DOCUMENTO {idx}\n"
+            f"NOME ORIGINAL: {name}\n"
+            f"CLASSIFICAÇÃO PRÉVIA: {kind}\n"
+            f"TEXTO EXTRAÍDO LOCALMENTE (auxiliar, não substitui leitura visual):\n{excerpt}"
+        )
+
+    header = (
+        "ÍNDICE DETERMINÍSTICO DOS DOCUMENTOS CARREGADOS\n"
+        f"TOTAL DE FICHEIROS: {len(entries)}\n"
+        "REGRA: nenhum ficheiro deste índice pode ser ignorado. Se existir um "
+        "PROJETO/ESTUDO/PIP CANDIDATO, é proibido concluir que não há proposta "
+        "sem primeiro o analisar visualmente e extrair o respetivo quadro-síntese/planta.\n\n"
+    )
+    return header + "\n\n".join(entries), project_candidate
+
+
+def _report_denies_existing_project(text: str) -> bool:
+    t = (text or "").lower()
+    markers = (
+        "não foi anexada proposta arquitetónica",
+        "nao foi anexada proposta arquitetonica",
+        "sem proposta arquitetónica anexada",
+        "sem proposta arquitetonica anexada",
+        "ausência de projeto desenhado",
+        "ausencia de projeto desenhado",
+        "não foi anexado projeto de arquitetura",
+        "nao foi anexado projeto de arquitetura",
+    )
+    return any(m in t for m in markers)
+
+
 def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
     """V5.1 FAST + SAFE: one grounded AI call per study.
 
@@ -635,17 +740,54 @@ def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
     triggering another slow AI pass.
     """
     client = get_client()
+    uploaded_files = list(uploaded_files or [])
+
+    # Local pre-index: fast, zero extra API calls, and guarantees that the model
+    # sees every original filename + machine-readable project evidence.
+    document_manifest, project_candidate = _local_document_manifest(uploaded_files)
     gemini_files = upload_files(uploaded_files)
 
-    contents: list[Any] = [prompt]
-    contents.extend(gemini_files)
+    contents: list[Any] = [prompt, document_manifest]
+    # Keep each original name immediately adjacent to the corresponding Gemini
+    # file reference. The Files API may otherwise expose an opaque/temp name.
+    for idx, (original, gemini_file) in enumerate(zip(uploaded_files, gemini_files), 1):
+        contents.append(
+            f"DOCUMENTO ANEXADO {idx}/{len(gemini_files)} — NOME ORIGINAL: {getattr(original, 'name', f'documento_{idx}')}"
+        )
+        contents.append(gemini_file)
+
     response = _generate_grounded_resilient(
         client,
         contents,
-        temperature=0.02,
+        temperature=0.01,
         attempts_per_model=1,
     )
     final_text = getattr(response, "text", "") or ""
+
+    # Safety net: if a project/PIP was deterministically detected in the uploads
+    # but the model still says there is no proposal, redo exactly once with a
+    # focused instruction. This avoids shipping a structurally wrong report.
+    if project_candidate and _report_denies_existing_project(final_text):
+        correction = (
+            "CORREÇÃO OBRIGATÓRIA: o índice documental contém pelo menos um "
+            "PROJETO/ESTUDO/PIP CANDIDATO. A resposta anterior ignorou-o. Refaça "
+            "o relatório completo desde o início, lendo esse anexo visualmente. "
+            "A secção 4 deve transcrever os valores da proposta (áreas, pisos, "
+            "fogos/tipologias, estacionamento, caves e quadro-síntese quando "
+            "existirem) e a secção 7 deve confrontar PROPOSTA × REGULAMENTO. "
+            "É proibido escrever que não existe proposta."
+        )
+        retry_contents = [prompt, document_manifest, correction]
+        for idx, (original, gemini_file) in enumerate(zip(uploaded_files, gemini_files), 1):
+            retry_contents.append(
+                f"DOCUMENTO ANEXADO {idx}/{len(gemini_files)} — NOME ORIGINAL: {getattr(original, 'name', f'documento_{idx}')}"
+            )
+            retry_contents.append(gemini_file)
+        response = _generate_grounded_resilient(
+            client, retry_contents, temperature=0.0, attempts_per_model=1
+        )
+        final_text = getattr(response, "text", "") or final_text
+
     final_text = _enforce_client_maximum_rules(final_text)
 
     sources = _extract_grounding_sources(response)
