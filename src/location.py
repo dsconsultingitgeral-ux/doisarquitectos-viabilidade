@@ -61,6 +61,123 @@ def _search(q: str, viewbox: str | None = None, bounded: int = 0, limit: int = 1
     return r.json()
 
 
+
+def _arcgis_search(q: str, limit: int = 10):
+    """Fallback sem chave de API usando o World Geocoding Service da Esri.
+
+    Devolve uma lista normalizada para a mesma estrutura mínima usada pelo
+    restante módulo. É usado apenas quando Nominatim falha/não devolve dados.
+    """
+    params = {
+        "SingleLine": q.strip(),
+        "f": "json",
+        "countryCode": "PRT",
+        "maxLocations": max(1, min(int(limit), 20)),
+        "outFields": "*",
+        "langCode": "PT",
+    }
+    r = requests.get(
+        "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates",
+        params=params,
+        headers=HEADERS,
+        timeout=12,
+    )
+    r.raise_for_status()
+    data = r.json() or {}
+    out = []
+    for c in data.get("candidates", []) or []:
+        loc = c.get("location") or {}
+        attrs = c.get("attributes") or {}
+        if "y" not in loc or "x" not in loc:
+            continue
+        addr_type = str(attrs.get("Addr_type") or attrs.get("Type") or "").lower()
+        address = {
+            "road": attrs.get("StName") or attrs.get("StAddr") or "",
+            "house_number": attrs.get("AddNum") or "",
+            "postcode": attrs.get("Postal") or attrs.get("PostalExt") or "",
+            "suburb": attrs.get("Neighborhood") or attrs.get("District") or "",
+            "village": attrs.get("City") or "",
+            "town": attrs.get("City") or "",
+            "city": attrs.get("City") or "",
+            "municipality": attrs.get("Subregion") or attrs.get("City") or "",
+            "county": attrs.get("Subregion") or "",
+            "state": attrs.get("Region") or "",
+            "country": attrs.get("Country") or "Portugal",
+        }
+        # Remover chaves vazias para não poluir a lógica a jusante.
+        address = {k: v for k, v in address.items() if v}
+        out.append({
+            "display_name": c.get("address") or q,
+            "lat": str(loc["y"]),
+            "lon": str(loc["x"]),
+            "address": address,
+            "importance": float(c.get("score", 0) or 0) / 100.0,
+            "type": "road" if any(x in addr_type for x in ("address", "street")) else "place",
+            "addresstype": "road" if any(x in addr_type for x in ("address", "street")) else "place",
+            "_provider": "arcgis",
+            "_addr_type": addr_type,
+        })
+    return out
+
+
+def _arcgis_reverse(lat: float, lon: float):
+    params = {
+        "location": f"{lon},{lat}",
+        "f": "json",
+        "langCode": "PT",
+        "featureTypes": "PointAddress,StreetAddress,StreetName,Locality,Postal",
+    }
+    r = requests.get(
+        "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/reverseGeocode",
+        params=params,
+        headers=HEADERS,
+        timeout=12,
+    )
+    r.raise_for_status()
+    data = r.json() or {}
+    a = data.get("address") or {}
+    loc = data.get("location") or {}
+    if not a or "y" not in loc or "x" not in loc:
+        return None
+    road = a.get("Address") or a.get("ShortLabel") or ""
+    address = {
+        "road": road,
+        "postcode": a.get("Postal") or "",
+        "suburb": a.get("Neighborhood") or a.get("District") or "",
+        "village": a.get("City") or "",
+        "town": a.get("City") or "",
+        "city": a.get("City") or "",
+        "municipality": a.get("Subregion") or a.get("City") or "",
+        "county": a.get("Subregion") or "",
+        "state": a.get("Region") or "",
+        "country": a.get("CountryCode") or "Portugal",
+    }
+    address = {k: v for k, v in address.items() if v}
+    return {
+        "display_name": a.get("LongLabel") or a.get("Match_addr") or road or f"{lat},{lon}",
+        "lat": str(loc["y"]),
+        "lon": str(loc["x"]),
+        "address": address,
+        "_provider": "arcgis",
+    }
+
+
+def _coordinates_result(raw: str):
+    """Aceita coordenadas no formato 'lat, lon' ou 'lat lon'."""
+    m = re.fullmatch(r"\s*(-?\d{1,2}(?:\.\d+)?)\s*[,; ]\s*(-?\d{1,3}(?:\.\d+)?)\s*", raw)
+    if not m:
+        return None
+    lat, lon = float(m.group(1)), float(m.group(2))
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
+    try:
+        return reverse_geocode(lat, lon)
+    except Exception:
+        return GeoResult(
+            display_name=f"{lat:.6f}, {lon:.6f}", lat=lat, lon=lon,
+            address={}, source_url="https://www.openstreetmap.org/", precision="unknown"
+        )
+
 def _street_variants(street: str) -> list[str]:
     """Generate realistic Portuguese street-name variants.
 
@@ -197,6 +314,11 @@ def geocode_location(query: str) -> Optional[GeoResult]:
         return None
 
     raw = " ".join(query.strip().split())
+
+    coord = _coordinates_result(raw)
+    if coord is not None:
+        return coord
+
     parts = [p.strip() for p in raw.split(",") if p.strip()]
 
     # Strong path for "street, locality".
@@ -288,26 +410,57 @@ def geocode_location(query: str) -> Optional[GeoResult]:
         )
         return _result(generic_candidates[0], raw, precision="street")
 
+    # Fallback independente: ArcGIS. Isto evita que uma indisponibilidade,
+    # rate-limit ou bloqueio do Nominatim inutilize toda a Etapa 01.
+    arc_queries = [raw]
+    if "portugal" not in raw.lower():
+        arc_queries.append(f"{raw}, Portugal")
+    for q in arc_queries:
+        try:
+            candidates = _arcgis_search(q, limit=10)
+            if candidates:
+                first = candidates[0]
+                addr_type = (first.get("_addr_type") or "").lower()
+                precision = "exact_street" if any(x in addr_type for x in ("address", "street")) else "locality"
+                return _result(first, raw, precision=precision)
+        except requests.RequestException:
+            continue
+
     return None
 
 
 def reverse_geocode(lat: float, lon: float) -> Optional[GeoResult]:
-    r = requests.get(
-        "https://nominatim.openstreetmap.org/reverse",
-        params={
-            "lat": lat,
-            "lon": lon,
-            "format": "jsonv2",
-            "addressdetails": 1,
-            "zoom": 18,
-            "accept-language": "pt",
-        },
-        headers=HEADERS,
-        timeout=15,
-    )
-    r.raise_for_status()
-    item = r.json()
-    return _result(item, precision="exact_street") if item and item.get("lat") else None
+    # 1) Nominatim
+    try:
+        r = requests.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={
+                "lat": lat,
+                "lon": lon,
+                "format": "jsonv2",
+                "addressdetails": 1,
+                "zoom": 18,
+                "accept-language": "pt",
+            },
+            headers=HEADERS,
+            timeout=12,
+        )
+        r.raise_for_status()
+        item = r.json()
+        if item and item.get("lat"):
+            return _result(item, precision="exact_street")
+    except (requests.RequestException, ValueError, TypeError):
+        pass
+
+    # 2) ArcGIS fallback para cliques no mapa.
+    try:
+        item = _arcgis_reverse(lat, lon)
+        if item:
+            return _result(item, precision="exact_street")
+    except (requests.RequestException, ValueError, TypeError):
+        pass
+
+    return None
 
 
 def inferred_fields(result: GeoResult) -> dict:
