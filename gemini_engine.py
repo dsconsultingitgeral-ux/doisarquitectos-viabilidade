@@ -406,9 +406,13 @@ def build_canonical_facts(
     def concrete(value: str) -> str:
         v = _without_citations(value)
         vu = v.upper()
-        if not v or vu in {"A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO"}:
+        missing_markers = (
+            "A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO",
+            "NÃO APURADO", "NAO APURADO", "NÃO FOI POSSÍVEL APURAR", "NAO FOI POSSIVEL APURAR"
+        )
+        if not v or vu in missing_markers:
             return ""
-        if "A CONFIRMAR" in vu or "A VALIDAR" in vu:
+        if any(marker in vu for marker in missing_markers):
             return ""
         return v
 
@@ -454,12 +458,31 @@ def build_canonical_facts(
             r"(?i)\b(FAVORÁVEL\s+COM\s+CONDICIONANTES|FAVORÁVEL|DESFAVORÁVEL)\b",
         )) or "A confirmar"
 
+    # A generic/placeholder state must not override concrete regulatory findings.
+    # When the report confirms an urban classification + an admitted/conforming use
+    # and contains unresolved constraints, the honest executive result is
+    # FAVORÁVEL COM CONDICIONANTES (not "análise concluída" or "não apurado").
+    vu = viability.upper()
+    placeholder_viability = (not viability or "NÃO APURADO" in vu or "NAO APURADO" in vu or
+                              "INDETERMINADA" in vu or "A CONFIRMAR" in vu or "A VALIDAR" in vu)
+    regulatory_support = bool(re.search(
+        r"(?is)(?:Uso\s+Principal|Usos?\s+(?:Admitidos?|Admissíveis))[^\n]{0,220}(?:CONFORME|Habitação|Comércio|Serviços)", text
+    ))
+    known_urban_class = bool(re.search(r"(?i)Solo\s+Urbano|Espaços\s+Habitacionais", text))
+    unresolved_constraints = bool(re.search(
+        r"(?i)A\s+CONFIRMAR|condicionantes?|alinhamentos?|área\s+jurídica|servid", text
+    ))
+    explicit_unfavourable = bool(re.search(r"(?i)\bDESFAVORÁVEL\b", text))
+    if placeholder_viability and known_urban_class and regulatory_support and not explicit_unfavourable:
+        viability = "FAVORÁVEL COM CONDICIONANTES" if unresolved_constraints else "FAVORÁVEL"
+
     # ---- Area ----------------------------------------------------------
     area = concrete(_line_value_raw(block, ("ÁREA IDENTIFICADA", "AREA IDENTIFICADA", "ÁREA", "AREA")))
     if not area:
         area = first_match((
             r"(?im)^\s*(?:[-•\x7f]\s*)?(?:ÁREA DO PROJETO\s*/\s*ÁREA JURÍDICA|AREA DO PROJETO\s*/\s*AREA JURIDICA)\s*:\s*(?:Levantamento Topográfico\s*:\s*)?([0-9][0-9 .,'’]*\s*m²)",
-            r"(?im)^\s*(?:Área do Levantamento|AREA DO LEVANTAMENTO)\s+([0-9][0-9 .,'’]*\s*m²)",
+            r"(?is)(?:Área\s+do\s+Polígono\s*\(Levantamento\)|Área\s+do\s+Levantamento|AREA\s+DO\s+LEVANTAMENTO)[^0-9]{0,80}([0-9][0-9 .,'’]*\s*m²)",
+            r"(?is)Polígono\s+total\s*:\s*([0-9][0-9 .,'’]*\s*m²)",
             r"(?i)\bárea\s+(?:total\s+)?(?:levantada|do levantamento)[^\d]{0,50}([0-9][0-9 .,'’]*\s*m²)",
             r"(?i)\b([0-9][0-9 .,'’]*\s*m²)\s*\(polígono\s+global",
         ), max_len=80) or "A confirmar"
@@ -637,7 +660,9 @@ def _replace_decision_block(text: str, facts: dict) -> str:
 
     def executive_value(key: str, missing: str = "Não apurado com os documentos disponíveis") -> str:
         value = _short_value(facts.get(key), "")
-        if value.upper() in {"A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO"}:
+        vu = value.upper()
+        if (vu in {"A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO"}
+                or "NÃO APURADO" in vu or "NAO APURADO" in vu):
             return missing
         return value or missing
 

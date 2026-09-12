@@ -1,0 +1,13 @@
+CORREÇÃO FINAL OBRIGATÓRIA.
+O relatório abaixo falhou um ou mais controlos automáticos de coerência.
+Reescreve o relatório COMPLETO, preservando apenas afirmações sustentadas, e corrige obrigatoriamente os pontos assinalados.
+
+REGRAS INEGOCIÁVEIS:
+- Habitação multifamiliar deve aparecer explicitamente na matriz de usos, mesmo que seja NÃO PERMITIDO ou NÃO DETERMINADO.
+- Se não houver proibição expressa e diretamente aplicável, não a elimines do cenário de máximo potencial quando puder aumentar o aproveitamento; apresenta-a como hipótese condicionada/PIP se necessário.
+- Se a área da parcela estiver por confirmar, não uses qualquer área hipotética ou de referência para gerar m² absolutos.
+- Não inventes número de fogos, implantação, ABC ou estacionamento.
+- Mantém três cenários: A conservador, B equilibrado, C máximo potencial tecnicamente defensável.
+- Mantém fontes e referências reais.
+
+DEVOLVE APENAS O RELATÓRIO FINAL COMPLETO EM MARKDOWN LIMPO.

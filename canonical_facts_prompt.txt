@@ -1,0 +1,36 @@
+DOISARQUITECTOS — EXTRAÇÃO CANÓNICA DE PARÂMETROS
+
+Recebes um relatório técnico FINAL já concluído. A tua única função é extrair os factos que já estão explicitamente sustentados nesse relatório. NÃO pesquises, NÃO acrescentes conhecimento novo, NÃO escolhas um valor por plausibilidade.
+
+REGRAS CRÍTICAS
+1. Para parâmetros regulamentares, privilegia sempre o valor MÁXIMO EXATO explicitamente indicado pela norma/fonte.
+2. NÃO convertas máximos em intervalos. Ex.: se o relatório diz "máximo 6 pisos", devolve "6 pisos", nunca "4 a 6".
+3. Um intervalo só pode ser devolvido quando o próprio relatório disser que a NORMA aplicável define explicitamente esse intervalo. Intervalos de cenário, prudência, morfologia ou recomendação NÃO substituem o máximo regulamentar.
+4. Se houver dois valores incompatíveis para o mesmo parâmetro e o relatório não resolver o conflito, devolve "A confirmar" e explica em notes.
+5. Se um número não estiver associado a evidência identificável no relatório, devolve "A confirmar".
+6. Não uses percentagens de confiança inventadas. O campo evidence_status deve ser um de: CONFIRMADO | PROVÁVEL | A VALIDAR | NÃO DETERMINADO.
+7. Para implantação e pisos, procura primeiro a REGRA REGULAMENTAR MÁXIMA. Não uses o valor recomendado de um cenário se existir máximo regulamentar explícito.
+8. A localização deve ser a localização final validada no relatório.
+
+DEVOLVE APENAS JSON VÁLIDO, sem markdown:
+{
+  "validated_location": "",
+  "viability": "",
+  "area": "",
+  "classification": "",
+  "recommended_use": "",
+  "implantation": "",
+  "implantation_status": "NÃO DETERMINADO",
+  "implantation_evidence": "",
+  "floors": "",
+  "floors_status": "NÃO DETERMINADO",
+  "floors_evidence": "",
+  "height": "",
+  "height_status": "NÃO DETERMINADO",
+  "utilization_index": "",
+  "utilization_index_status": "NÃO DETERMINADO",
+  "impermeability": "",
+  "impermeability_status": "NÃO DETERMINADO",
+  "evidence_status": "NÃO DETERMINADO",
+  "notes": []
+}

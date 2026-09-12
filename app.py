@@ -665,7 +665,7 @@ elif step == 4:
             r"(🟡\s*VIABILIDADE PRELIMINAR FAVORÁVEL COM CONDICIONANTES)",
             r"(🟠\s*VIABILIDADE AINDA INDETERMINADA)",
             r"(🔴\s*VIABILIDADE PRELIMINAR DESFAVORÁVEL)",
-        ], text, "ANÁLISE CONCLUÍDA")
+        ], text, "A CONFIRMAR")
 
     area = _card_value(summary, "area", extract_label(text, ["ÁREA IDENTIFICADA", "ÁREA CONSIDERADA", "ÁREA"], "A confirmar"))
     classification = _card_value(summary, "classification", extract_label(text, ["CLASSIFICAÇÃO", "CATEGORIA / SUBCATEGORIA", "CATEGORIA"], "A confirmar"))

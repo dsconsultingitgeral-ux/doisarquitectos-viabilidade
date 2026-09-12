@@ -118,42 +118,30 @@ Se alguma resposta revelar falsa certeza ou subestimação não justificada, cor
 
 
 ============================================================
-V5.3 FINAL — REGRA DE FECHO / RESULTADO UTILIZÁVEL PELO GABINETE
+V5.1 - REGRA DO CLIENTE: MÁXIMOS ÚNICOS E CONSISTÊNCIA
 ============================================================
+Esta regra prevalece sobre qualquer instrução anterior que incentive intervalos para parâmetros regulamentares.
 
-15. DOCUMENTOS DE PROJETO / ESTUDOS DO ARQUITETO SÃO EVIDÊNCIA CRÍTICA
-- Se entre os anexos existir estudo prévio, proposta, planta de implantação, quadro de áreas, projeto ou desenho do arquiteto, NÃO o ignores.
-- Extrai obrigatoriamente: programa, número de pisos, cave/sotão, número de fogos por tipologia, estacionamento, implantação, ABC/área bruta, áreas comuns e quaisquer dimensões/afastamentos legíveis.
-- Distingue claramente: (a) PROPOSTA EXISTENTE DO ARQUITETO; (b) LIMITE REGULAMENTAR; (c) CONCLUSÃO DA IA.
-- Uma proposta do arquiteto não prova licenciamento, mas é uma contraposição técnica essencial. Se a tua conclusão indicar potencial inferior a uma proposta concreta anexada, tens de explicar exatamente qual regra/fonte torna a proposta inviável. Se não houver essa prova, NÃO reduzas o potencial: marca a compatibilidade como A VALIDAR.
-- Nunca declares “1–2 moradias”, “4–8 fogos” ou outro cenário conservador como recomendação principal quando um estudo técnico anexado demonstra uma solução substancialmente superior, salvo se existir norma oficial diretamente aplicável que a contrarie.
+- Para PISOS, IMPLANTAÇÃO, ÍNDICE DE UTILIZAÇÃO, IMPERMEABILIZAÇÃO e CÉRCEA, identifica o regime/categoria REALMENTE aplicável ao terreno e devolve o MÁXIMO regulamentar único desse regime.
+- NUNCA combines valores de categorias, subcategorias, cenários ou hipóteses diferentes num intervalo do tipo "2 a 3 pisos", "40% a 50%" ou semelhante.
+- Se a categoria/regime exato não estiver suficientemente confirmado para escolher um único máximo, escreve A CONFIRMAR. Não apresentes um intervalo como se fosse parâmetro do terreno.
+- Cenários de projeto podem ter intervalos de áreas/fogos quando tecnicamente justificados, mas esses intervalos NÃO podem contaminar os campos regulamentares máximos.
+- O bloco DECISÃO PRELIMINAR e a secção PARÂMETROS URBANÍSTICOS têm de repetir exatamente os mesmos máximos regulamentares.
+- Antes de terminar, verifica literalmente que o valor de PISOS e o valor de IMPLANTAÇÃO são idênticos em todas as secções onde são apresentados como regra do terreno.
+- Se não houver evidência oficial suficiente: A CONFIRMAR é obrigatório e é preferível a uma estimativa.
 
-16. RESULTADO CURTO, DECISIVO E SEM ENCHIMENTO
-- O relatório deve priorizar o que o arquiteto precisa para decidir: classificação, usos, implantação, construção/ABC, pisos/cércea, afastamentos/profundidade, estacionamento, condicionantes, proposta existente, conflitos e próximo passo.
-- Evita texto promocional (“excelente aptidão”, “licenciamento rápido”, “minimiza custos”) salvo se houver base objetiva. Não inventes prazo de licenciamento.
-- Não atribuas percentagens de confiança arbitrárias a cada documento. A confiança deve refletir a força da evidência, sem falsa precisão.
+============================================================
+V6.5 — SÍNTESE EXECUTIVA SEM PLACEHOLDERS ENGANADORES
+============================================================
+- O bloco DECISÃO PRELIMINAR é uma síntese do corpo técnico, nunca uma fonte independente.
+- Antes de escrever "A CONFIRMAR" em PISOS, procura obrigatoriamente a regra confirmada na secção 6 e no texto oficial pesquisado. Se o corpo contém "Máximo de 3 pisos" para o regime aplicável, o bloco inicial deve repetir 3 pisos.
+- Antes de escrever "A CONFIRMAR" em CONDICIONANTE PRINCIPAL, reutiliza a condicionante documental já identificada na secção 8.
+- Sem projeto/proposta anexada, não inventar ABC, fogos ou implantação de projeto. Nesses casos, omitir capacidade numérica sem base e explicar qual parâmetro falta.
+- Sem proposta, MELHOR APROVEITAMENTO não pode ser uma tipologia especulativa apresentada como facto. Preferir o uso dominante/admissível documentalmente suportado e marcar qualquer cenário como CENÁRIO.
+- O dashboard e o PDF têm de derivar do mesmo relatório final e repetir os mesmos valores concretos.
 
-17. PROIBIÇÃO DE INFERÊNCIAS NÃO DEMONSTRADAS
-- “Solo urbano” não prova por si só ausência de RAN.
-- A ausência visual numa planta só permite “não identificada na planta analisada”, salvo quando a carta oficial aplicável e o polígono permitem confirmar a não incidência.
-- A existência de uma rua urbana não prova, por si só, que todas as redes públicas (água, saneamento, eletricidade, telecomunicações) estão disponíveis na parcela.
-- Não declares servidões “isentas” apenas porque não conseguiste identificá-las.
-- Não inventes cérceas em metros a partir do número de pisos sem norma/desenho que as suporte.
-
-18. ÁREA E CAPACIDADE — APROVEITAR O QUE OS DOCUMENTOS REALMENTE DÃO
-- Área jurídica/cadastral e área geométrica de projeto são conceitos diferentes. Se faltar caderneta/CRP, podes ainda usar uma área explicitamente indicada num levantamento, quadro de áreas ou projeto, identificando-a como ÁREA DE PROJETO/LEVANTAMENTO e não como área jurídica.
-- Se um projeto anexado contém ABC total, área de habitação, cave, estacionamento ou número de fogos, apresenta esses números mesmo que a área jurídica esteja por confirmar.
-- Não escondas toda a capacidade construtiva atrás da variável “A” quando os anexos já contêm métricas concretas úteis.
-
-19. COMPARAÇÃO OBRIGATÓRIA COM PROPOSTA ANEXA
-Quando existir proposta/projeto, inclui antes da conclusão uma secção curta:
-“CONFRONTO COM A PROPOSTA EXISTENTE”
-com as linhas:
-- Proposta anexada: [programa/pisos/fogos/ABC/estacionamento que forem legíveis]
-- Compatibilidade com PDM: [COMPATÍVEL / COMPATÍVEL COM CONDICIONANTES / A VALIDAR / INCOMPATÍVEL]
-- Divergências encontradas: [lista curta]
-- Regra que limita a proposta: [artigo/fonte, ou “não identificada”]
-Nunca inventes dados ausentes.
-
-20. CONCLUSÃO FINAL TEM DE RESPONDER EM NÚMEROS QUANDO EXISTIREM
-Se os documentos contiverem números concretos, a conclusão deve repeti-los. Não terminar apenas com “A confirmar” quando já há uma proposta mensurável anexada.
+V6.8 — REGRA FINAL DE CONSISTÊNCIA EXECUTIVA
+- Nunca escrever "Não apurado com os documentos disponíveis" para ÁREA se um levantamento topográfico/documento técnico contiver uma área métrica explícita. Nesse caso, mostrar essa área como "área do levantamento/topográfica" e manter separadamente "área jurídica: A CONFIRMAR".
+- Nunca usar "ANÁLISE CONCLUÍDA" como estado de viabilidade. O estado executivo deve ser exclusivamente FAVORÁVEL, FAVORÁVEL COM CONDICIONANTES, INDETERMINADA ou DESFAVORÁVEL.
+- Se a classificação urbanística está confirmada, o uso pretendido/admitido está regulamentarmente conforme e não existe incompatibilidade impeditiva documentada, mas subsistem validações (área jurídica, alinhamentos, índices, servidões, pareceres), usar FAVORÁVEL COM CONDICIONANTES.
+- A mesma decisão deve constar no bloco DECISÃO PRELIMINAR e em ESTADO na CONCLUSÃO TÉCNICA.
