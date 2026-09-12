@@ -44,43 +44,35 @@ def get_client() -> genai.Client:
 
 
 def get_model() -> str:
-    # Mantém o modelo principal configurável nos Secrets, sem expor chaves no GitHub.
-    return _secret("GEMINI_MODEL", "gemini-3.7-flash")
+    # Mantém o modelo configurável, mas migra automaticamente um identificador antigo
+    # usado nas versões anteriores da aplicação que não consta da lista oficial atual.
+    configured = _secret("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    if configured == "gemini-3.7-flash":
+        logger.warning("GEMINI_MODEL=gemini-3.7-flash não é um endpoint oficial atual; a usar gemini-2.5-flash.")
+        return "gemini-2.5-flash"
+    return configured or "gemini-2.5-flash"
 
 
 def get_fallback_models() -> list[str]:
-    """Build a production-safe fallback chain using current GA Gemini 3 models.
+    """Small, verified production fallback chain.
 
-    The Streamlit secret GEMINI_MODEL is respected as the first preference, but the
-    application always keeps several stable fallbacks. Old Gemini 2.x model names are
-    deliberately ignored because they may return 404 for newer API users.
+    Keeping the chain short is intentional: invalid/retired model probes were a major
+    source of avoidable latency. The configured secret remains first; a stable Gemini
+    2.5 Flash fallback is always available, followed by one current Flash fallback.
     """
-    primary = get_model().strip()
+    primary = get_model().strip() or "gemini-2.5-flash"
     raw = _secret("GEMINI_FALLBACK_MODELS", "")
-
-    # Current stable text/multimodal production fallbacks (Aug 2026).
-    built_in = [
-        "gemini-3.7-flash",
-        "gemini-3.6-flash",
-        "gemini-3.5-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
-    ]
-
     requested = [m.strip() for m in raw.split(",") if m.strip()]
-    models = [primary] + requested + built_in
+    built_in = ["gemini-2.5-flash", "gemini-3.5-flash"]
 
     seen: set[str] = set()
     out: list[str] = []
-    for model in models:
-        if not model or model in seen:
-            continue
-        # Never let a stale 2.x secret break the whole chain.
-        if model.startswith("gemini-2."):
-            logger.warning("Ignoring retired/stale Gemini fallback model: %s", model)
-            continue
-        seen.add(model)
-        out.append(model)
+    for model in [primary] + requested + built_in:
+        if model and model not in seen:
+            seen.add(model)
+            out.append(model)
+        if len(out) >= 3:
+            break
     return out
 
 
@@ -335,51 +327,82 @@ def _withhold_ambiguous_max(value: str) -> str:
     return _short_value(value)
 
 
-def build_canonical_facts(analysis_text: str) -> dict:
-    """Build the dashboard record locally from the SAME final report.
+def _line_value_raw(block: str, labels: tuple[str, ...]) -> str:
+    for label in labels:
+        m = re.search(rf"(?im)^\s*{re.escape(label)}\s*:\s*(.+?)\s*$", block or "")
+        if m:
+            return re.sub(r"\s+", " ", m.group(1)).strip()
+    return ""
 
-    V5.1 intentionally performs zero extra Gemini calls here. This removes the former
-    fourth request per study and guarantees that dashboard and PDF derive from one
-    completed text only.
+
+def _has_citation(value: str) -> bool:
+    return bool(re.search(r"\[\d+(?:\s*[,;]\s*\d+)*\]", value or ""))
+
+
+def _without_citations(value: str) -> str:
+    value = re.sub(r"\s*\[\d+(?:\s*[,;]\s*\d+)*\]", "", value or "")
+    return _short_value(value)
+
+
+def build_canonical_facts(analysis_text: str, sources: list[SourceLink] | None = None) -> dict:
+    """Build conservative dashboard facts from the same final report.
+
+    Critical regulatory values are shown only when they are single-valued and the
+    report line carries a citation while real grounding sources were captured. If that
+    evidence is missing, the UI says A confirmar instead of presenting model inference
+    as a regulation.
     """
-    block = _decision_block(analysis_text)
-    if not block:
-        block = analysis_text or ""
+    block = _decision_block(analysis_text) or (analysis_text or "")
+    sources = sources or []
+    has_grounded_sources = bool(sources)
 
-    implantation = _withhold_ambiguous_max(_line_value(block, ("IMPLANTAÇÃO", "IMPLANTACAO")))
-    floors = _withhold_ambiguous_max(_line_value(block, ("PISOS",)))
+    raw_implantation = _line_value_raw(block, ("IMPLANTAÇÃO", "IMPLANTACAO"))
+    raw_floors = _line_value_raw(block, ("PISOS",))
 
+    def critical_value(raw: str) -> str:
+        if not raw or _has_numeric_range(raw):
+            return "A confirmar"
+        if re.search(r"\d", raw) and (not has_grounded_sources or not _has_citation(raw)):
+            return "A confirmar"
+        return _without_citations(raw)
+
+    implantation = critical_value(raw_implantation)
+    floors = critical_value(raw_floors)
+
+    classification_raw = _line_value_raw(block, ("CLASSIFICAÇÃO", "CLASSIFICACAO"))
+    use_raw = _line_value_raw(block, ("MELHOR APROVEITAMENTO", "USO RECOMENDADO"))
+
+    # Classification/use are still allowed as descriptive values when no numeric rule is
+    # asserted, but the evidence badge remains A VALIDAR if grounding was not captured.
     facts = {
-        "validated_location": _line_value(block, ("LOCALIZAÇÃO", "LOCALIZACAO")),
-        "viability": _line_value(block, ("VIABILIDADE",)),
-        "area": _line_value(block, ("ÁREA IDENTIFICADA", "AREA IDENTIFICADA", "ÁREA", "AREA")),
-        "classification": _line_value(block, ("CLASSIFICAÇÃO", "CLASSIFICACAO")),
-        "recommended_use": _line_value(block, ("MELHOR APROVEITAMENTO", "USO RECOMENDADO")),
+        "validated_location": _without_citations(_line_value_raw(block, ("LOCALIZAÇÃO", "LOCALIZACAO"))),
+        "viability": _without_citations(_line_value_raw(block, ("VIABILIDADE",))),
+        "area": _without_citations(_line_value_raw(block, ("ÁREA IDENTIFICADA", "AREA IDENTIFICADA", "ÁREA", "AREA"))),
+        "classification": _without_citations(classification_raw),
+        "recommended_use": _without_citations(use_raw),
         "implantation": implantation,
         "implantation_status": _status_from_value(implantation),
-        "implantation_evidence": "Bloco executivo do relatório final",
+        "implantation_evidence": "Linha executiva citada + fontes grounded" if implantation != "A confirmar" else "Evidência insuficiente",
         "floors": floors,
         "floors_status": _status_from_value(floors),
-        "floors_evidence": "Bloco executivo do relatório final",
+        "floors_evidence": "Linha executiva citada + fontes grounded" if floors != "A confirmar" else "Evidência insuficiente",
         "height": "A confirmar",
         "height_status": "NÃO DETERMINADO",
         "utilization_index": "A confirmar",
         "utilization_index_status": "NÃO DETERMINADO",
         "impermeability": "A confirmar",
         "impermeability_status": "NÃO DETERMINADO",
-        "evidence_status": "NÃO DETERMINADO",
+        "evidence_status": "REFERENCIADO" if has_grounded_sources else "A VALIDAR",
         "notes": [],
     }
 
-    statuses = [facts["implantation_status"], facts["floors_status"]]
-    if statuses and all(x == "PROVÁVEL" for x in statuses):
-        facts["evidence_status"] = "PROVÁVEL"
-    elif any(x == "A VALIDAR" for x in statuses):
+    if implantation == "A confirmar" or floors == "A confirmar":
         facts["evidence_status"] = "A VALIDAR"
+        facts["notes"].append("Pelo menos um parâmetro regulamentar crítico não ficou sustentado por valor único + citação + fonte grounded.")
 
-    if facts["validated_location"] == "A confirmar":
-        # Do not invent a location; the UI will fall back to session location.
-        facts["validated_location"] = ""
+    for k in ("validated_location", "viability", "area", "classification", "recommended_use"):
+        if not facts[k] or facts[k] in {"—", "-"}:
+            facts[k] = "" if k == "validated_location" else "A confirmar"
     return facts
 
 def _replace_decision_block(text: str, facts: dict) -> str:
@@ -519,7 +542,7 @@ def _generate_grounded_resilient(
     models = get_fallback_models()
 
     for model_index, model in enumerate(models):
-        per_model_attempts = 3 if model_index == 0 else attempts_per_model
+        per_model_attempts = max(1, min(2, attempts_per_model + (1 if model_index == 0 else 0)))
 
         for attempt in range(1, per_model_attempts + 1):
             try:
@@ -553,12 +576,12 @@ def _generate_grounded_resilient(
                     model, attempt, per_model_attempts, exc,
                 )
                 if attempt < per_model_attempts:
-                    delay = min(12.0, (1.8 ** attempt) + random.uniform(0.25, 1.0))
+                    delay = min(3.0, 0.8 + (0.8 * attempt) + random.uniform(0.05, 0.25))
                     time.sleep(delay)
 
         # A tiny pause prevents an immediate burst against the next model endpoint.
         if model_index < len(models) - 1:
-            time.sleep(random.uniform(0.35, 0.9))
+            time.sleep(0.15)
 
     if last_exc is not None:
         raise AIServiceTemporarilyUnavailable(_friendly_upstream_message(last_exc)) from last_exc
@@ -629,7 +652,7 @@ def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
     response_id = getattr(response, "response_id", None) or getattr(response, "id", None) or ""
 
     # Zero API calls: UI and PDF consume exactly the same completed report.
-    summary = build_canonical_facts(final_text)
+    summary = build_canonical_facts(final_text, sources=sources)
     final_text = _replace_decision_block(final_text, summary)
     return final_text, sources, str(response_id), summary
 

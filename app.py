@@ -493,6 +493,43 @@ elif step == 2:
     if uploaded:
         st.session_state.uploaded_files = uploaded
 
+    # Pedido do cliente: capa própria em PDF, separada dos documentos técnicos.
+    # Não entra na análise IA; é apenas preservada como página 1 do relatório final.
+    cover_upload = st.file_uploader(
+        "Capa do relatório (PDF, opcional)",
+        type=["pdf"],
+        accept_multiple_files=False,
+        key="report_cover_pdf_v52",
+        help="Se anexada, a primeira página deste PDF será usada exatamente como capa do relatório final."
+    )
+    if cover_upload is not None:
+        cover_bytes = cover_upload.getvalue()
+        if cover_bytes:
+            try:
+                from pypdf import PdfReader
+                from io import BytesIO
+                cover_reader = PdfReader(BytesIO(cover_bytes))
+                if not cover_reader.pages:
+                    raise ValueError("o ficheiro não contém páginas")
+                st.session_state.cover_pdf_bytes = cover_bytes
+                st.session_state.cover_pdf_name = cover_upload.name
+                st.session_state.report_pdf_cache_key = ""
+                st.session_state.report_pdf_bytes = None
+            except Exception as exc:
+                st.error(f"A capa não é um PDF válido: {exc}")
+
+    if st.session_state.get("cover_pdf_bytes"):
+        cap1, cap2 = st.columns([5, 1])
+        with cap1:
+            st.caption(f"Capa definida: {st.session_state.get('cover_pdf_name') or 'PDF carregado'} · a primeira página será preservada como página 1.")
+        with cap2:
+            if st.button("Remover capa", key="remove_report_cover_v52", use_container_width=True):
+                st.session_state.cover_pdf_bytes = None
+                st.session_state.cover_pdf_name = ""
+                st.session_state.report_pdf_cache_key = ""
+                st.session_state.report_pdf_bytes = None
+                st.rerun()
+
     files = st.session_state.uploaded_files
     if files:
         st.success(f"{len(files)} documento(s) pronto(s) para análise.")
@@ -731,14 +768,34 @@ elif step == 4:
         source_cards(st.session_state.analysis_sources)
 
     with tabs[2]:
-        st.caption("A capa institucional doisarquitectos é incluída automaticamente na primeira página.")
-        pdf = build_pdf(
-            title="Relatório de Viabilidade Urbanística",
-            location=_card_value(summary, "validated_location", st.session_state.location),
-            analysis_text=text,
-            sources=st.session_state.analysis_sources,
-            include_cover=True,
+        if st.session_state.get("cover_pdf_bytes"):
+            st.caption(f"Capa: {st.session_state.get('cover_pdf_name') or 'PDF carregado'} · primeira página preservada no relatório final.")
+        else:
+            st.caption("Sem capa personalizada: será usada a capa institucional doisarquitectos como primeira página.")
+
+        import hashlib
+        cover_bytes = st.session_state.get("cover_pdf_bytes")
+        source_fingerprint = "|".join(
+            f"{getattr(src, 'title', '')}:{getattr(src, 'url', '')}"
+            for src in (st.session_state.analysis_sources or [])
         )
+        cache_key = hashlib.sha256(
+            (text + "\n" + source_fingerprint).encode("utf-8") + (cover_bytes or b"")
+        ).hexdigest()
+
+        if st.session_state.get("report_pdf_cache_key") != cache_key or not st.session_state.get("report_pdf_bytes"):
+            pdf = build_pdf(
+                title="Relatório de Viabilidade Urbanística",
+                location=_card_value(summary, "validated_location", st.session_state.location),
+                analysis_text=text,
+                sources=st.session_state.analysis_sources,
+                include_cover=True,
+                cover_pdf_bytes=cover_bytes,
+            )
+            st.session_state.report_pdf_cache_key = cache_key
+            st.session_state.report_pdf_bytes = pdf
+        else:
+            pdf = st.session_state.report_pdf_bytes
 
         local_name = (
             st.session_state.parish

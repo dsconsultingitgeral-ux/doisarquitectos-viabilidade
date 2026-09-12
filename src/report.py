@@ -18,32 +18,53 @@ TEMPLATE = ROOT / "assets" / "folha_tipo.pdf"
 COVER_LOGO = ROOT / "assets" / "cover_logo.png"
 
 def _fmt(s: str) -> str:
-    s = html.escape(s or "")
-    s = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", s)
-    s = re.sub(r"\*(.+?)\*", r"<i>\1</i>", s)
-    # Never show raw LaTeX in final PDF.
-    s = re.sub(r'\$+', '', s)
-    s = re.sub(r'\\text\{([^}]*)\}', r'\1', s)
-    s = re.sub(r'\\mathrm\{([^}]*)\}', r'\1', s)
-    return s
+    """Convert common Markdown/LaTeX artefacts to clean ReportLab inline markup."""
+    raw = str(s or "")
+
+    # Common LaTeX/math tokens that otherwise leaked into client PDFs.
+    raw = raw.replace(r"\%", "%")
+    raw = raw.replace(r"\times", "×")
+    raw = raw.replace(r"\leq", "≤").replace(r"\geq", "≥")
+    raw = raw.replace(r"\le", "≤").replace(r"\ge", "≥")
+    raw = re.sub(r"\\text\{([^}]*)\}", r"\1", raw)
+    raw = re.sub(r"\\mathrm\{([^}]*)\}", r"\1", raw)
+    raw = re.sub(r"\\mathbf\{([^}]*)\}", r"\1", raw)
+    raw = re.sub(r"\\(?:,|;|!|quad|qquad)\b", " ", raw)
+    raw = re.sub(r"\\^\{([^}]*)\}", r"^\1", raw)
+    raw = re.sub(r"_\{([^}]*)\}", r"_\1", raw)
+    raw = raw.replace("$", "")
+    raw = re.sub(r"\s+", " ", raw).strip()
+
+    # Escape first, then apply only the small subset of markup ReportLab supports.
+    escaped = html.escape(raw)
+    escaped = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", escaped)
+    escaped = re.sub(r"(?<!\*)\*([^*]+?)\*(?!\*)", r"<i>\1</i>", escaped)
+    escaped = escaped.replace("`", "")
+    return escaped
 
 def _parse(text: str):
-    for raw in text.splitlines():
+    for raw in (text or "").splitlines():
         line = raw.strip()
         if line and re.fullmatch(r"[=\-_]{8,}", line):
             continue
         if not line:
             yield ("space", "")
-        elif line.startswith("### "):
-            yield ("h3", line[4:])
-        elif line.startswith("## "):
-            yield ("h2", line[3:])
-        elif line.startswith("# "):
-            yield ("h1", line[2:])
+            continue
+
+        heading = re.match(r"^(#{1,6})\s+(.+)$", line)
+        if heading:
+            level = len(heading.group(1))
+            value = heading.group(2).strip()
+            if level == 1:
+                yield ("h1", value)
+            elif level == 2:
+                yield ("h2", value)
+            else:
+                yield ("h3", value)
         elif line.startswith("|") and line.endswith("|"):
             yield ("table", line)
-        elif line.startswith(("- ", "* ")):
-            yield ("bullet", line[2:])
+        elif line.startswith(("- ", "* ", "• ")):
+            yield ("bullet", line[2:] if line[:2] in {"- ", "* "} else line[2:])
         else:
             yield ("p", line)
 
@@ -214,22 +235,42 @@ def _content_pdf(title: str, location: str, analysis_text: str, sources) -> byte
     doc.build(story)
     return out.getvalue()
 
-def build_pdf(title: str, location: str, analysis_text: str, sources, include_cover: bool = True) -> bytes:
+def build_pdf(
+    title: str,
+    location: str,
+    analysis_text: str,
+    sources,
+    include_cover: bool = True,
+    cover_pdf_bytes: bytes | None = None,
+) -> bytes:
+    """Build the final PDF.
+
+    If a client-supplied cover PDF is provided, its FIRST page is preserved exactly
+    as page 1. Otherwise the institutional fallback cover is generated. Content pages
+    keep the existing official folha-tipo.
+    """
     content_bytes = _content_pdf(title, location, analysis_text, sources)
     content_reader = PdfReader(BytesIO(content_bytes))
     writer = PdfWriter()
 
-    # Optional institutional cover requested by the client. The remaining pages
-    # keep using the existing official folha-tipo, so the established visual
-    # identity and workflow remain unchanged.
-    # Client requirement: the institutional cover is ALWAYS page 1.
-    # The include_cover argument is retained only for backward API compatibility.
-    cover_reader = PdfReader(BytesIO(_cover_pdf(title, location)))
-    writer.add_page(cover_reader.pages[0])
+    if include_cover:
+        if cover_pdf_bytes:
+            try:
+                supplied = PdfReader(BytesIO(cover_pdf_bytes))
+                if not supplied.pages:
+                    raise ValueError("O PDF de capa não contém páginas.")
+                writer.add_page(supplied.pages[0])
+            except Exception as exc:
+                raise ValueError(f"Capa PDF inválida: {exc}") from exc
+        else:
+            fallback_cover = PdfReader(BytesIO(_cover_pdf(title, location)))
+            writer.add_page(fallback_cover.pages[0])
 
     if TEMPLATE.exists():
+        template_bytes = TEMPLATE.read_bytes()
         for content_page in content_reader.pages:
-            base_reader = PdfReader(str(TEMPLATE))
+            # Fresh reader/page for each merge: pypdf mutates the page object.
+            base_reader = PdfReader(BytesIO(template_bytes))
             base_page = base_reader.pages[0]
             base_page.merge_page(content_page)
             writer.add_page(base_page)
@@ -240,3 +281,4 @@ def build_pdf(title: str, location: str, analysis_text: str, sources, include_co
     out = BytesIO()
     writer.write(out)
     return out.getvalue()
+
