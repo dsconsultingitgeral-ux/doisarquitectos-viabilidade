@@ -644,6 +644,48 @@ def build_canonical_facts(
 
     return facts
 
+
+def _harmonize_client_report(text: str, facts: dict) -> str:
+    """Final deterministic client-safety pass (V6.7).
+
+    Keeps scenarios explicitly hypothetical when regulatory maxima are not
+    confirmed and forces the conclusion ESTADO to use the same viability label
+    shown in the executive block. No new urbanistic facts are introduced.
+    """
+    out = text or ""
+    if not out:
+        return out
+
+    # If floors/implantation are not numerically confirmed, scenario numbers are
+    # allowed only as design hypotheses. Mark the scenarios once, prominently.
+    uncertain = []
+    for key, label in (("floors", "pisos/cércea"), ("implantation", "implantação")):
+        v = str((facts or {}).get(key, "") or "").upper()
+        if not v or "A CONFIRMAR" in v or "SEM MÁXIMO" in v or "NÃO DETERMINADO" in v or "NAO DETERMINADO" in v:
+            uncertain.append(label)
+    if uncertain and re.search(r"(?i)Cenário\s+[ABC]", out):
+        note = ("NOTA DE LEITURA DOS CENÁRIOS: Os valores numéricos apresentados nos cenários são "
+                "hipóteses indicativas de estudo e NÃO constituem máximos regulamentares confirmados. "
+                "Os parâmetros ainda dependentes de validação municipal permanecem A CONFIRMAR.")
+        # Insert before the first scenario section, but never duplicate it.
+        if "NOTA DE LEITURA DOS CENÁRIOS" not in out:
+            m = re.search(r"(?im)^\s*(?:[-•]\s*)?Cenário\s+A\b", out)
+            if m:
+                out = out[:m.start()] + note + "\n\n" + out[m.start():]
+
+    # One decision vocabulary everywhere. The conclusion must not contradict
+    # the executive card (e.g. POTENCIALMENTE CONFORME vs FAVORÁVEL...).
+    viability = str((facts or {}).get("viability", "") or "").strip()
+    if viability and viability.upper() not in {"A CONFIRMAR", "A VALIDAR", "NÃO DETERMINADO", "NAO DETERMINADO"}:
+        # Restrict replacement to section 10, preserving all technical prose.
+        m = re.search(r"(?is)(^\s*(?:#+\s*)?10\.\s*CONCLUSÃO TÉCNICA\b)(.*?)(?=^\s*(?:#+\s*)?11\.|\Z)", out, re.M)
+        if m:
+            sec = m.group(2)
+            sec2 = re.sub(r"(?im)^(\s*(?:[-•]\s*)?ESTADO\s*:\s*).*$", lambda x: x.group(1) + viability, sec, count=1)
+            out = out[:m.start(2)] + sec2 + out[m.end(2):]
+
+    return out
+
 def _replace_decision_block(text: str, facts: dict) -> str:
     """Render exactly one executive block and keep the technical body once.
 
@@ -1052,6 +1094,7 @@ def run_full_analysis(prompt: str, uploaded_files: Iterable[Any]):
 
     # Zero API calls: UI and PDF consume exactly the same completed report.
     summary = build_canonical_facts(final_text, sources=sources, has_documents=bool(uploaded_files))
+    final_text = _harmonize_client_report(final_text, summary)
     final_text = _replace_decision_block(final_text, summary)
     return final_text, sources, str(response_id), summary
 

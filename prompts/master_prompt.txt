@@ -176,3 +176,8 @@ REGRAS FINAIS ANTI-ALUCINAÇÃO
 - Não criar moradias, fogos, alturas, índices ou afastamentos “típicos”.
 - Não repetir a mesma informação em 15 secções.
 - Prioridade: EXTRair → CONFIRMAR REGRA → COMPARAR → CONCLUIR.
+
+V6.7 — CONSISTÊNCIA FINAL OBRIGATÓRIA
+- A VIABILIDADE da DECISÃO PRELIMINAR e o ESTADO da CONCLUSÃO TÉCNICA são a mesma decisão executiva e devem usar exatamente a mesma expressão: FAVORÁVEL, FAVORÁVEL COM CONDICIONANTES, INDETERMINADA ou DESFAVORÁVEL.
+- Se PISOS/CÉRCEA, IMPLANTAÇÃO ou outro máximo regulamentar estiver A CONFIRMAR, qualquer número usado num cenário é apenas HIPÓTESE INDICATIVA DE ESTUDO. Deve ser rotulado explicitamente como cenário indicativo e nunca descrito como máximo regulamentar, capacidade aprovada ou direito edificatório.
+- Um cenário pode testar 2, 3, 4 ou outro número de pisos apenas se ficar inequívoco que esse número não substitui a regra regulamentar por confirmar.
