@@ -63,7 +63,7 @@ def get_fallback_models() -> list[str]:
     primary = get_model().strip() or "gemini-2.5-flash"
     raw = _secret("GEMINI_FALLBACK_MODELS", "")
     requested = [m.strip() for m in raw.split(",") if m.strip()]
-    built_in = ["gemini-2.5-flash", "gemini-3.5-flash"]
+    built_in = ["gemini-2.5-flash"]
 
     seen: set[str] = set()
     out: list[str] = []
@@ -71,7 +71,7 @@ def get_fallback_models() -> list[str]:
         if model and model not in seen:
             seen.add(model)
             out.append(model)
-        if len(out) >= 3:
+        if len(out) >= 2:
             break
     return out
 
@@ -181,18 +181,18 @@ def upload_files(files: Iterable[Any]) -> list[Any]:
 
             last_exc: Exception | None = None
             uploaded = None
-            for attempt in range(1, 5):
+            for attempt in range(1, 3):
                 try:
                     uploaded = client.files.upload(file=temp_path)
-                    uploaded = _wait_until_ready(client, uploaded, timeout_seconds=120)
+                    uploaded = _wait_until_ready(client, uploaded, timeout_seconds=90)
                     break
                 except Exception as exc:
                     last_exc = exc
-                    if not _is_retryable_error(exc) or attempt == 4:
+                    if not _is_retryable_error(exc) or attempt == 2:
                         raise
                     delay = min(10.0, (1.7 ** attempt) + random.uniform(0.1, 0.8))
                     logger.warning(
-                        "Temporary Gemini file-upload error (attempt %s/4): %s",
+                        "Temporary Gemini file-upload error (attempt %s/2): %s",
                         attempt, exc,
                     )
                     time.sleep(delay)

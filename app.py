@@ -493,42 +493,10 @@ elif step == 2:
     if uploaded:
         st.session_state.uploaded_files = uploaded
 
-    # Pedido do cliente: capa própria em PDF, separada dos documentos técnicos.
-    # Não entra na análise IA; é apenas preservada como página 1 do relatório final.
-    cover_upload = st.file_uploader(
-        "Capa do relatório (PDF, opcional)",
-        type=["pdf"],
-        accept_multiple_files=False,
-        key="report_cover_pdf_v52",
-        help="Se anexada, a primeira página deste PDF será usada exatamente como capa do relatório final."
-    )
-    if cover_upload is not None:
-        cover_bytes = cover_upload.getvalue()
-        if cover_bytes:
-            try:
-                from pypdf import PdfReader
-                from io import BytesIO
-                cover_reader = PdfReader(BytesIO(cover_bytes))
-                if not cover_reader.pages:
-                    raise ValueError("o ficheiro não contém páginas")
-                st.session_state.cover_pdf_bytes = cover_bytes
-                st.session_state.cover_pdf_name = cover_upload.name
-                st.session_state.report_pdf_cache_key = ""
-                st.session_state.report_pdf_bytes = None
-            except Exception as exc:
-                st.error(f"A capa não é um PDF válido: {exc}")
-
-    if st.session_state.get("cover_pdf_bytes"):
-        cap1, cap2 = st.columns([5, 1])
-        with cap1:
-            st.caption(f"Capa definida: {st.session_state.get('cover_pdf_name') or 'PDF carregado'} · a primeira página será preservada como página 1.")
-        with cap2:
-            if st.button("Remover capa", key="remove_report_cover_v52", use_container_width=True):
-                st.session_state.cover_pdf_bytes = None
-                st.session_state.cover_pdf_name = ""
-                st.session_state.report_pdf_cache_key = ""
-                st.session_state.report_pdf_bytes = None
-                st.rerun()
+    # V5.3 FINAL: a capa é institucional e automática no PDF final.
+    # O utilizador só carrega documentos técnicos do processo nesta etapa.
+    st.session_state.cover_pdf_bytes = None
+    st.session_state.cover_pdf_name = ""
 
     files = st.session_state.uploaded_files
     if files:
@@ -537,57 +505,17 @@ elif step == 2:
         for f in files:
             ext = Path(f.name).suffix.lower().replace(".", "").upper() or "FICHEIRO"
             size_mb = len(f.getvalue()) / (1024 * 1024)
-            rows.append({"Documento": f.name, "Tipo": ext, "Tamanho": f"{size_mb:.2f} MB", "Estado": "✅ Fornecido"})
+            rows.append({"Documento": f.name, "Tipo": ext, "Tamanho": f"{size_mb:.2f} MB"})
         st.dataframe(rows, use_container_width=True, hide_index=True)
     else:
-        st.markdown("""
-        <div class="da-status-warn">
-          <b>Sem documentos? Pode avançar.</b><br>
-          A aplicação realiza uma análise com base na localização confirmada e em fontes oficiais. Quando faltarem dados da parcela, assinala claramente o que necessita de confirmação.
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("### Elementos verificados na análise")
-    check = [
-        "PDM em vigor e regulamento", "Planta de Ordenamento", "Planta de Condicionantes",
-        "REN", "RAN", "Recursos hídricos / cheias", "Incêndio e riscos",
-        "Património / arqueologia", "Carta de ruído", "Servidões e infraestruturas",
-        "Sistema viário / acessos", "Cadastro / informação predial",
-        "PU / PP / loteamentos / unidades de execução / medidas preventivas"
-    ]
-    cols = st.columns(2)
-    for i, item in enumerate(check):
-        cols[i % 2].markdown(f"✓ {item}")
-
-    st.markdown("### Como quer avançar?")
-    q1, q2 = st.columns(2)
-
-    with q1:
-        st.markdown("""
-        <div class="da-card">
-          <div class="da-card-label">APENAS LOCALIZAÇÃO</div>
-          <div class="da-card-value" style="font-size:20px">Só localização</div>
-          <div class="da-card-note">Pesquisa oficial e análise inicial, mesmo sem documentos da parcela.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        quick = st.button("Avançar sem documentos →", use_container_width=True)
-
-    with q2:
-        st.markdown("""
-        <div class="da-card">
-          <div class="da-card-label">COM DOCUMENTOS</div>
-          <div class="da-card-value" style="font-size:20px">Com documentos</div>
-          <div class="da-card-note">Maior confiança, cruzamento documental e análise parcela-a-parcela.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        complete = st.button("Usar documentos anexados →", type="primary", use_container_width=True)
+        st.info("Pode avançar sem documentos; nesse caso a análise ficará limitada ao que for possível confirmar por fontes oficiais.")
 
     c1, c2 = st.columns([1, 2])
     with c1:
         if st.button("← Voltar", use_container_width=True):
             go(1)
     with c2:
-        if quick or complete:
+        if st.button("CONTINUAR PARA ANÁLISE →", type="primary", use_container_width=True):
             go(3)
 
 # ------------------------------------------------------------
@@ -601,15 +529,10 @@ elif step == 3:
 
     st.markdown("""
     <div class="da-card">
-      <div class="da-card-label">ANÁLISE URBANÍSTICA</div>
-      <div class="da-card-value" style="font-size:20px">Verificação técnica e potencial do terreno</div>
-      <div class="da-card-note" style="font-size:13px;line-height:1.65;margin-top:14px">
-        ✓ Localização e documentação disponível<br>
-        ✓ PDM, ordenamento e condicionantes<br>
-        ✓ REN, RAN, ruído, incêndio, património e servidões<br>
-        ✓ Parâmetros urbanísticos e cálculos aplicáveis<br>
-        ✓ Cenários de aproveitamento do terreno<br>
-        ✓ Fontes oficiais e referências utilizadas
+      <div class="da-card-label">ANÁLISE DO PROCESSO</div>
+      <div class="da-card-value" style="font-size:20px">Projeto / terreno × PDM × condicionantes</div>
+      <div class="da-card-note" style="font-size:13px;line-height:1.6;margin-top:12px">
+        A aplicação lê os documentos, extrai a proposta quando existe e confronta-a com as regras urbanísticas oficiais aplicáveis.
       </div>
     </div>
     """, unsafe_allow_html=True)
@@ -642,7 +565,7 @@ elif step == 3:
         )
 
         try:
-            with st.spinner("A analisar o terreno e consultar fontes oficiais…"):
+            with st.spinner("A ler os documentos, confirmar o PDM e verificar a proposta…"):
                 result = run_full_analysis(
                     prompt,
                     st.session_state.uploaded_files
@@ -768,13 +691,10 @@ elif step == 4:
         source_cards(st.session_state.analysis_sources)
 
     with tabs[2]:
-        if st.session_state.get("cover_pdf_bytes"):
-            st.caption(f"Capa: {st.session_state.get('cover_pdf_name') or 'PDF carregado'} · primeira página preservada no relatório final.")
-        else:
-            st.caption("Sem capa personalizada: será usada a capa institucional doisarquitectos como primeira página.")
+        st.caption("A capa institucional doisarquitectos é aplicada automaticamente como primeira página.")
 
         import hashlib
-        cover_bytes = st.session_state.get("cover_pdf_bytes")
+        cover_bytes = None
         source_fingerprint = "|".join(
             f"{getattr(src, 'title', '')}:{getattr(src, 'url', '')}"
             for src in (st.session_state.analysis_sources or [])
